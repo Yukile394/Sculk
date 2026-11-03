@@ -17,7 +17,7 @@ public abstract class Mixin6 {
    )
    private double sculk$scaleVelocityX(double x) {
       Fps32 velocity = SculkClient.get(Fps32.class);
-      return velocity != null && velocity.applies((Entity)this) ? x * velocity.horizontalScale() : x;
+      return velocity != null && velocity.applies((Entity)(Object)this) ? x * velocity.horizontalScale() : x;
    }
 
    @ModifyVariable(
@@ -28,7 +28,7 @@ public abstract class Mixin6 {
    )
    private double sculk$scaleVelocityY(double y) {
       Fps32 velocity = SculkClient.get(Fps32.class);
-      return velocity != null && velocity.applies((Entity)this) ? y * velocity.verticalScale() : y;
+      return velocity != null && velocity.applies((Entity)(Object)this) ? y * velocity.verticalScale() : y;
    }
 
    @ModifyVariable(
@@ -39,6 +39,6 @@ public abstract class Mixin6 {
    )
    private double sculk$scaleVelocityZ(double z) {
       Fps32 velocity = SculkClient.get(Fps32.class);
-      return velocity != null && velocity.applies((Entity)this) ? z * velocity.horizontalScale() : z;
+      return velocity != null && velocity.applies((Entity)(Object)this) ? z * velocity.horizontalScale() : z;
    }
 }
