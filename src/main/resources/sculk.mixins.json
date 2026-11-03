@@ -1,0 +1,19 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.sculk.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "client": [
+    "Mixin3",
+    "Mixin4",
+    "Mixin5",
+    "Mixin2",
+    "Mixin6",
+    "Mixin1",
+    "Mixin7"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "refmap": "sculk-refmap.json"
+}

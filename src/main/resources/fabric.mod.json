@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "sculk",
+  "version": "1.0.0-beta",
+  "name": "sculk",
+  "description": "sculk client — beta foundation.",
+  "authors": [
+    "olivia"
+  ],
+  "license": "ARR",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.sculk.SculkClient"
+    ]
+  },
+  "mixins": [
+    "sculk.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.15.11",
+    "minecraft": "~1.20.1",
+    "java": ">=17",
+    "fabric-api": "*"
+  }
+}
