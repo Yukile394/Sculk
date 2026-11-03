@@ -1,0 +1,64 @@
+name: Bootstrap (decompile)
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "src/main/java doluysa üzerine yaz (elle düzenlemeleri siler)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Jar kontrol
+        run: |
+          set -euo pipefail
+          f=original/Sculk.jar
+          test -f "$f" || { echo "HATA: $f yok"; exit 1; }
+          echo "Boyut (bayt): $(stat -c%s "$f")"
+          if ! unzip -tq "$f" >/dev/null 2>&1; then
+            echo "HATA: $f geçerli bir jar/zip değil (beklenen boyut ~130925 bayt)."
+            exit 1
+          fi
+          echo "Jar geçerli."
+
+      - name: Wrapper kontrol
+        run: |
+          test -f gradlew && test -f gradle/wrapper/gradle-wrapper.jar || { echo "HATA: gradlew veya gradle/wrapper eksik"; exit 1; }
+          chmod +x gradlew
+
+      - name: Decompile + remap
+        run: |
+          set -euo pipefail
+          args=(--jar original/Sculk.jar --root . --project-prefix dev/sculk/ --yarn "1.20.1+build.10")
+          if [ "${{ inputs.force }}" = "true" ]; then args+=(--force); fi
+          python3 tools/decompile.py "${args[@]}"
+
+      - name: Commit
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "değişiklik yok"
+          else
+            git commit -m "bootstrap: decompiled sources"
+            git push
+          fi

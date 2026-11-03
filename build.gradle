@@ -1,0 +1,68 @@
+plugins {
+    id 'fabric-loom' version '1.6.12'
+}
+
+base {
+    archivesName = project.archives_base_name
+}
+
+version = project.mod_version
+group = project.maven_group
+
+repositories {
+    mavenCentral()
+}
+
+// Jar'da proje dışı gömülü kütüphane varsa bootstrap bu dosyayı üretir
+def bundledLibs = file("libs/bundled-libs.jar")
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings "net.fabricmc:yarn:${project.yarn_mappings}:v2"
+    modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+    if (bundledLibs.exists()) {
+        implementation files(bundledLibs)
+    }
+}
+
+def awFiles = fileTree(dir: "src/main/resources", include: "*.accesswidener").files
+if (!awFiles.isEmpty()) {
+    loom {
+        accessWidenerPath = awFiles.first()
+    }
+}
+
+loom {
+    mixin {
+        defaultRefmapName = "${project.archives_base_name}-refmap.json"
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = "UTF-8"
+    options.release = 17
+    options.warnings = false
+    options.compilerArgs += ["-Xmaxerrs", "2000"]
+}
+
+jar {
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    if (bundledLibs.exists()) {
+        from({ zipTree(bundledLibs) }) {
+            exclude "META-INF/MANIFEST.MF", "META-INF/INDEX.LIST", "META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA"
+        }
+    }
+
+    manifest {
+        attributes "Implementation-Version": project.version
+    }
+}
