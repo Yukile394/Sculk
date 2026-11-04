@@ -25,6 +25,10 @@ public abstract class Mixin4 {
    )
    private void sculk$onRenderTick(boolean tick, CallbackInfo ci) {
       SculkClient.get();
+<<<<<<< HEAD
       ModuleManager.renderTick(MinecraftClient.getInstance().getTickDelta());
+=======
+      ModuleManager.renderTick(MinecraftClient.getInstance().getRenderTickCounter().getTickDelta(true));
+>>>>>>> a073ff2 (Guncelleme)
    }
 }

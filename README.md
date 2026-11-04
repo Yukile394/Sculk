@@ -1,6 +1,6 @@
 # sculk (decompile projesi)
 
-Orijinal: `sculk` client (Fabric 1.20.1), yazar: **olivia**.
+Orijinal: `sculk` client (Fabric 1.21.1), yazar: **olivia**.
 `fabric.mod.json` lisansı: **ARR (All Rights Reserved)**.
 
 > Bu lisans, kaynağın başkaları tarafından kopyalanıp yayınlanmasına izin vermez.
@@ -11,12 +11,12 @@ Orijinal: `sculk` client (Fabric 1.20.1), yazar: **olivia**.
 
 | | |
 |---|---|
-| Minecraft | 1.20.1 |
+| Minecraft | 1.21.1 |
 | Fabric Loader | 0.16.10 |
-| Fabric API | 0.92.2+1.20.1 |
-| Yarn | 1.20.1+build.10 |
-| Loom / Gradle | 1.6.12 / 8.6 |
-| Java | 17 |
+| Fabric API | 0.116.10+1.21.1 |
+| Yarn | 1.21.1+build.3 |
+| Loom / Gradle | 1.7-SNAPSHOT / 8.8 |
+| Java | 21 |
 | Main | `dev.sculk.SculkClient` |
 
 ## Kullanım (sırayla)

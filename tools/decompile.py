@@ -12,7 +12,7 @@ Verilen jar içinden:
 
 Kullanım:
   python3 tools/decompile.py --jar original/Sculk.jar --project-prefix dev/sculk/ \
-      --yarn 1.20.1+build.10 [--root .] [--force]
+      --yarn 1.21.1+build.3 [--root .] [--force]
 """
 import argparse
 import json
@@ -406,7 +406,7 @@ def main() -> int:
     ap.add_argument("--root", default=".", type=Path)
     ap.add_argument("--project-prefix", action="append", required=True,
                     help="decompile edilecek paket yolu, örn. dev/sculk/ (birden fazla verilebilir)")
-    ap.add_argument("--yarn", required=True, help="örn. 1.20.1+build.10")
+    ap.add_argument("--yarn", required=True, help="örn. 1.21.1+build.3")
     ap.add_argument("--vineflower", default=VINEFLOWER_VERSION)
     ap.add_argument("--force", action="store_true", help="mevcut src/main/java üzerine yaz")
     ap.add_argument("-v", "--verbose", action="store_true")

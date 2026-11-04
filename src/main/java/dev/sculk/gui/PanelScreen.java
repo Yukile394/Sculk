@@ -98,6 +98,13 @@ public final class PanelScreen extends Screen {
       ConfigManager.save(SculkClient.modules());
    }
 
+<<<<<<< HEAD
+=======
+   @Override
+   public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+   }
+
+>>>>>>> a073ff2 (Guncelleme)
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
       context.fill(0, 0, this.width, this.height, -1778384896);
 
@@ -145,14 +152,22 @@ public final class PanelScreen extends Screen {
       return super.mouseReleased(mouseX, mouseY, button);
    }
 
+<<<<<<< HEAD
    public boolean mouseScrolled(double mouseX, double mouseY, double amount) {
+=======
+   public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double amount) {
+>>>>>>> a073ff2 (Guncelleme)
       Iterator var7 = this.frames.iterator();
       if (var7.hasNext()) {
          PanelScreen.Frame frame = (PanelScreen.Frame)var7.next();
          frame.scroll((float)amount * 18.0F);
          return true;
       } else {
+<<<<<<< HEAD
          return super.mouseScrolled(mouseX, mouseY, amount);
+=======
+         return super.mouseScrolled(mouseX, mouseY, horizontalAmount, amount);
+>>>>>>> a073ff2 (Guncelleme)
       }
    }
 

@@ -70,6 +70,13 @@ public final class ClickGuiScreen extends Screen {
       }
    }
 
+<<<<<<< HEAD
+=======
+   @Override
+   public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
+   }
+
+>>>>>>> a073ff2 (Guncelleme)
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
       float alpha = this.fadeIn.animate(1.0F, 10.0F);
       context.fill(0, 0, this.width, this.height, ((int)(alpha * 144.0F) & 0xFF) << 24);
@@ -118,7 +125,11 @@ public final class ClickGuiScreen extends Screen {
       return super.mouseReleased(mouseX, mouseY, button);
    }
 
+<<<<<<< HEAD
    public boolean mouseScrolled(double mouseX, double mouseY, double verticalAmount) {
+=======
+   public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+>>>>>>> a073ff2 (Guncelleme)
       for (CategoryWindow window : this.windows) {
          window.mouseScrolled(mouseX, mouseY, verticalAmount);
       }
