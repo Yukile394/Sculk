@@ -54,13 +54,10 @@ public final class FriendsScreen extends Screen {
       }
    }
 
-<<<<<<< HEAD
-=======
    @Override
    public void renderBackground(DrawContext context, int mouseX, int mouseY, float delta) {
    }
 
->>>>>>> a073ff2 (Guncelleme)
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
       context.fill(0, 0, this.width, this.height, -1778384896);
       FriendsScreen.Geo g = this.geo();

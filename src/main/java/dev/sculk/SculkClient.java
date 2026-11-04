@@ -11,10 +11,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
-<<<<<<< HEAD
-=======
 import net.minecraft.client.render.RenderTickCounter;
->>>>>>> a073ff2 (Guncelleme)
 
 public class SculkClient implements ClientModInitializer {
    public static final String MOD_ID = "sculk";
@@ -52,10 +49,6 @@ public class SculkClient implements ClientModInitializer {
       }
 
       ClientTickEvents.END_CLIENT_TICK.register((EndTick)client -> ModuleManager.tick());
-<<<<<<< HEAD
-      HudRenderCallback.EVENT.register((HudRenderCallback)(ctx, tickDelta) -> ModuleManager.renderHUD(ctx, tickDelta));
-=======
       HudRenderCallback.EVENT.register((HudRenderCallback)(ctx, tickCounter) -> ModuleManager.renderHUD(ctx, tickCounter.getTickDelta(true)));
->>>>>>> a073ff2 (Guncelleme)
    }
 }
