@@ -1,34 +1,51 @@
 package dev.sculk.module.modules.client;
 
-import dev.sculk.gui.ClickGuiScreen;
-import dev.sculk.gui.PanelScreen;
+import dev.sculk.gui.HudEditorScreen;
+import dev.sculk.gui.ZeltrixGui;
 import dev.sculk.module.Category;
 import dev.sculk.module.Module;
-import dev.sculk.module.setting.ModeSetting;
+import dev.sculk.module.setting.BooleanSetting;
 import dev.sculk.module.setting.Setting;
-import net.minecraft.client.gui.screen.Screen;
 
 public final class Fps15 extends Module {
-   private final ModeSetting<Fps15.Layout> layout = new ModeSetting<>("Layout", Fps15.Layout.Panel)
-      .describe("Panel = smoothhud-style frames, Classic = four category panels");
+   private final BooleanSetting blur = new BooleanSetting("Blur", true).describe("Blurred game behind the GUI");
+   private final BooleanSetting descriptions = new BooleanSetting("Descriptions", true).describe("Tooltip with the module / setting description");
    private boolean closing;
 
    public Fps15() {
       super("ClickGUI", "Opens the sculk interface", Category.CLIENT);
-      this.addSettings(new Setting[]{this.layout});
+      this.addSettings(new Setting[]{this.blur, this.descriptions});
       this.key(-1);
+   }
+
+   public boolean blur() {
+      return this.blur.get();
+   }
+
+   public boolean descriptions() {
+      return this.descriptions.get();
+   }
+
+   @Override
+   protected boolean playsToggleSound() {
+      return false;
+   }
+
+   @Override
+   protected boolean persistsEnabled() {
+      return false;
    }
 
    @Override
    public void onEnable() {
-      if (!(this.mc.currentScreen instanceof PanelScreen) && !(this.mc.currentScreen instanceof ClickGuiScreen)) {
-         this.mc.setScreen((Screen)(this.layout.is(Fps15.Layout.Classic) ? new ClickGuiScreen() : new PanelScreen()));
+      if (!(this.mc.currentScreen instanceof ZeltrixGui) && !(this.mc.currentScreen instanceof HudEditorScreen)) {
+         this.mc.setScreen(new ZeltrixGui());
       }
    }
 
    @Override
    public void onDisable() {
-      if (this.mc.currentScreen instanceof PanelScreen || this.mc.currentScreen instanceof ClickGuiScreen) {
+      if (this.mc.currentScreen instanceof ZeltrixGui) {
          this.closing = true;
          this.mc.setScreen(null);
          this.closing = false;
@@ -39,10 +56,5 @@ public final class Fps15 extends Module {
       if (!this.closing && this.isEnabled()) {
          this.setEnabled(false);
       }
-   }
-
-   public static enum Layout {
-      Panel,
-      Classic;
    }
 }

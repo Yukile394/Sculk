@@ -33,3 +33,12 @@ Bootstrap'i `force` ile tekrar çalıştırmak `src/main/java` içindeki elle d�
 ```
 ./gradlew build
 ```
+
+## Değişiklikler (ZeltrixWare portu)
+
+- ClickGUI ZeltrixWare tarzı: sürüklenebilir paneller, arama (Ctrl+F), Friends ve Configs panelleri, GUI renk seçici, açıklama baloncuğu. Orta tık = bind (Toggle/Hold), sağ tık = ayar aç.
+- Sesler: enable / disable / boolean / scroll / swipein / swipeout / keypress (Client > Sounds).
+- Aim Assist varsayılan tuş: M.
+- Auto Firework: slot kilidi, 3.2 blok içinde fişek slotu <-> silah slotu döngüsü, dahili Trigger (EclipseCrit / PhantomCrit), Aim Assist uyumu. Trigger açıkken Trigger Bot kapanır.
+- Criticals modülü (Zeltrix modları), Target ESP (Yukile Helix / Orbit + Halo, Pulse, Cage).
+- GUI fontu: Client > GUI Colors > SF Font.

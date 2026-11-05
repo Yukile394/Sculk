@@ -1,7 +1,15 @@
 package dev.sculk.render;
 
+import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
+import net.minecraft.client.render.BufferBuilder;
+import net.minecraft.client.render.BufferRenderer;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.render.VertexFormat;
+import net.minecraft.client.render.VertexFormats;
+import org.joml.Matrix4f;
 
 public final class Render2D {
    private Render2D() {
@@ -81,6 +89,52 @@ public final class Render2D {
             }
          }
       }
+   }
+
+   /** Plain rectangle, float coordinates. */
+   public static void rect(DrawContext context, float x, float y, float width, float height, int color) {
+      if (width > 0.0F && height > 0.0F) {
+         fill(context, x, y, x + width, y + height, color);
+      }
+   }
+
+   /** Four colour gradient quad (top-left, top-right, bottom-right, bottom-left). */
+   public static void gradient(DrawContext context, float x1, float y1, float x2, float y2, int tl, int tr, int br, int bl) {
+      if (x2 <= x1 || y2 <= y1) {
+         return;
+      }
+
+      Matrix4f matrix = context.getMatrices().peek().getPositionMatrix();
+      RenderSystem.enableBlend();
+      RenderSystem.defaultBlendFunc();
+      RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+      BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+      buffer.vertex(matrix, x1, y1, 0.0F).color(tl);
+      buffer.vertex(matrix, x1, y2, 0.0F).color(bl);
+      buffer.vertex(matrix, x2, y2, 0.0F).color(br);
+      buffer.vertex(matrix, x2, y1, 0.0F).color(tr);
+      BufferRenderer.drawWithGlobalProgram(buffer.end());
+      RenderSystem.disableBlend();
+   }
+
+   public static void gradientH(DrawContext context, float x1, float y1, float x2, float y2, int left, int right) {
+      gradient(context, x1, y1, x2, y2, left, right, right, left);
+   }
+
+   public static void gradientV(DrawContext context, float x1, float y1, float x2, float y2, int top, int bottom) {
+      gradient(context, x1, y1, x2, y2, top, top, bottom, bottom);
+   }
+
+   public static boolean hovered(double mouseX, double mouseY, double x, double y, double width, double height) {
+      return mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + height;
+   }
+
+   public static void scissor(DrawContext context, float x1, float y1, float x2, float y2) {
+      context.enableScissor((int)Math.floor((double)x1), (int)Math.floor((double)y1), (int)Math.ceil((double)x2), (int)Math.ceil((double)y2));
+   }
+
+   public static void endScissor(DrawContext context) {
+      context.disableScissor();
    }
 
    private static void fill(DrawContext context, float x1, float y1, float x2, float y2, int color) {

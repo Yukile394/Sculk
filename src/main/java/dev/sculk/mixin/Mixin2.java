@@ -1,6 +1,7 @@
 package dev.sculk.mixin;
 
 import dev.sculk.SculkClient;
+import dev.sculk.module.modules.combat.Criticals;
 import dev.sculk.module.modules.combat.Fps31;
 import dev.sculk.util.CombatUtils;
 import net.minecraft.util.Hand;
@@ -36,5 +37,9 @@ public abstract class Mixin2 {
    )
    private void sculk$noteAttack(PlayerEntity player, Entity target, CallbackInfo ci) {
       CombatUtils.noteInteracted(target);
+      Criticals criticals = SculkClient.get(Criticals.class);
+      if (criticals != null && criticals.isEnabled()) {
+         criticals.onAttack(target);
+      }
    }
 }

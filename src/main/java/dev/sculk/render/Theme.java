@@ -12,6 +12,13 @@ public final class Theme {
    public static final int TEXT_DIM = -8750457;
    public static int ACCENT = -7635969;
    public static int ACCENT_DIM = 1435204607;
+   /** Second gradient colour (ZeltrixWare style accent gradient). */
+   public static int ACCENT2 = -8365735;
+   /** Click GUI body colour (ZeltrixWare BgColor). */
+   public static int BODY = 0xF50E0E12;
+   public static final int GUI_HEADER = 0xFF16161C;
+   public static final int GUI_MODULE = 0xFF14141A;
+   public static final int GUI_SETTINGS = 0xFF0D0D11;
 
    private Theme() {
    }
@@ -20,6 +27,8 @@ public final class Theme {
       int rgb = hsv((float)(hue % 360) / 360.0F, clamp01(saturation / 100.0F), clamp01(brightness / 100.0F));
       ACCENT = 0xFF000000 | rgb;
       ACCENT_DIM = 1426063360 | rgb;
+      int rgb2 = hsv((float)((hue + 48) % 360) / 360.0F, clamp01(saturation / 100.0F), clamp01(brightness / 100.0F * 0.9F));
+      ACCENT2 = 0xFF000000 | rgb2;
       int alpha = Math.round(clamp01(opacity / 100.0F) * 255.0F);
       PANEL = alpha << 24 | 657935;
       HEADER = Math.min(255, alpha + 13) << 24 | 1052694;
@@ -30,6 +39,14 @@ public final class Theme {
       HEADER = -15724522;
       ACCENT = -7635969;
       ACCENT_DIM = 1435204607;
+      ACCENT2 = -8365735;
+   }
+
+   /** Accent colour for index based gradients (used by the 3D ESP). */
+   public static int accent(float t) {
+      float f = t - (float)Math.floor((double)t);
+      float wave = f < 0.5F ? f * 2.0F : (1.0F - f) * 2.0F;
+      return mix(ACCENT, ACCENT2, wave);
    }
 
    private static float clamp01(float value) {

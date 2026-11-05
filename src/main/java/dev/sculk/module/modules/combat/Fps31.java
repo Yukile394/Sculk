@@ -12,7 +12,7 @@ import net.minecraft.client.world.ClientWorld;
 public final class Fps31 extends Module {
    public Fps31() {
       super("ElyFix", "Fireworks boost through walls and cobwebs", Category.COMBAT);
-      this.setEnabled(true);
+      this.setEnabledSilently(true);
    }
 
    public boolean redirects(ItemStack stack, BlockPos target) {

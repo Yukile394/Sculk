@@ -2,6 +2,7 @@ package dev.sculk.module;
 
 import dev.sculk.module.setting.BooleanSetting;
 import dev.sculk.module.setting.Setting;
+import dev.sculk.sound.Sounds;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -16,6 +17,8 @@ public abstract class Module {
    private final BooleanSetting middleClick = new BooleanSetting("Middle Click", false).describe("Toggles this module with the middle mouse button");
    private boolean enabled;
    private int key = -1;
+   private int defaultKey = -1;
+   private boolean holdBind;
    protected MinecraftClient mc;
 
    protected MinecraftClient getMC() {
@@ -64,6 +67,39 @@ public abstract class Module {
       return this;
    }
 
+   /** Sets the bind and remembers it as the default (used when the config has no explicit bind). */
+   public Module defaultKey(int key) {
+      this.key = key;
+      this.defaultKey = key;
+      return this;
+   }
+
+   public int getDefaultKey() {
+      return this.defaultKey;
+   }
+
+   /** Hold bind: the module is on only while the key is held. */
+   public boolean isHoldBind() {
+      return this.holdBind;
+   }
+
+   public void setHoldBind(boolean holdBind) {
+      this.holdBind = holdBind;
+   }
+
+   protected boolean playsToggleSound() {
+      return true;
+   }
+
+   /** GUI modules (ClickGUI, Friends) are never restored as enabled. */
+   protected boolean persistsEnabled() {
+      return true;
+   }
+
+   public boolean isPersistent() {
+      return this.persistsEnabled();
+   }
+
    public List<Setting<?>> settings() {
       return this.settings;
    }
@@ -91,6 +127,10 @@ public abstract class Module {
             this.onEnable();
          } else {
             this.onDisable();
+         }
+
+         if (this.playsToggleSound() && this.getMC().world != null) {
+            Sounds.toggle(value);
          }
       }
    }

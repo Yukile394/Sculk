@@ -47,7 +47,8 @@ public final class ModeSetting<E extends Enum<E>> extends Setting<E> {
 
    public String display(int index) {
       String raw = this.values[index].name();
-      return raw.charAt(0) + raw.substring(1).toLowerCase(Locale.ROOT);
+      boolean camel = raw.chars().skip(1L).anyMatch(Character::isUpperCase);
+      return camel ? raw : raw.charAt(0) + raw.substring(1).toLowerCase(Locale.ROOT);
    }
 
    public String display() {

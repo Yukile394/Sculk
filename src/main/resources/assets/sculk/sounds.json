@@ -1,0 +1,10 @@
+{
+  "enable":     { "sounds": [ "sculk:enable" ] },
+  "disable":    { "sounds": [ "sculk:disable" ] },
+  "keypress":   { "sounds": [ "sculk:keypress" ] },
+  "keyrelease": { "sounds": [ "sculk:keyrelease" ] },
+  "boolean":    { "sounds": [ "sculk:boolean" ] },
+  "scroll":     { "sounds": [ "sculk:scroll" ] },
+  "swipein":    { "sounds": [ "sculk:swipein" ] },
+  "swipeout":   { "sounds": [ "sculk:swipeout" ] }
+}

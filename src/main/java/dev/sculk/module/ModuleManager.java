@@ -4,12 +4,15 @@ import dev.sculk.module.modules.client.Fps15;
 import dev.sculk.module.modules.client.Fps16;
 import dev.sculk.module.modules.client.Fps24;
 import dev.sculk.module.modules.client.Fps25;
+import dev.sculk.module.modules.client.SoundsModule;
+import dev.sculk.module.modules.combat.AutoFirework;
+import dev.sculk.module.modules.combat.Criticals;
 import dev.sculk.module.modules.combat.Fps12;
 import dev.sculk.module.modules.combat.Fps13;
 import dev.sculk.module.modules.combat.Fps14;
-import dev.sculk.module.modules.combat.Fps30;
 import dev.sculk.module.modules.combat.Fps31;
 import dev.sculk.module.modules.combat.Fps32;
+import dev.sculk.module.modules.render.TargetEsp;
 import dev.sculk.render.Toasts;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -144,8 +147,16 @@ public final class ModuleManager {
             } else {
                for (Module modulex : MODULAR) {
                   int key = modulex.getKey();
-                  if (key >= 0 && isDown(next, key) && !isDown(keyState, key)) {
-                     modulex.toggle();
+                  if (key >= 0) {
+                     boolean down = isDown(next, key);
+                     boolean was = isDown(keyState, key);
+                     if (modulex.isHoldBind()) {
+                        if (down != was) {
+                           modulex.setEnabled(down);
+                        }
+                     } else if (down && !was) {
+                        modulex.toggle();
+                     }
                   }
                }
             }
@@ -175,12 +186,15 @@ public final class ModuleManager {
       MODULAR.add(new Fps12());
       MODULAR.add(new Fps13());
       MODULAR.add(new Fps14());
-      MODULAR.add(new Fps30());
+      MODULAR.add(new AutoFirework());
       MODULAR.add(new Fps31());
       MODULAR.add(new Fps32());
+      MODULAR.add(new Criticals());
+      MODULAR.add(new TargetEsp());
       MODULAR.add(new Fps16());
       MODULAR.add(new Fps24());
       MODULAR.add(new Fps25());
+      MODULAR.add(new SoundsModule());
       MODULAR.add(new Fps15());
    }
 }

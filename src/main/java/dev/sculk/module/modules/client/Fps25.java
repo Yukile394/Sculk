@@ -41,6 +41,16 @@ public final class Fps25 extends Module {
       }
    }
 
+   @Override
+   protected boolean playsToggleSound() {
+      return false;
+   }
+
+   @Override
+   protected boolean persistsEnabled() {
+      return false;
+   }
+
    public void onScreenClosed() {
       if (!this.closing && this.isEnabled()) {
          this.setEnabled(false);

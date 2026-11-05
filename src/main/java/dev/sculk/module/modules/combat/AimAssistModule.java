@@ -1,5 +1,6 @@
 package dev.sculk.module.modules.combat;
 
+import dev.sculk.SculkClient;
 import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.setting.BooleanSetting;
@@ -104,7 +105,7 @@ public abstract class AimAssistModule extends Module {
                && (allowInvisible || !e.isInvisibleTo(this.mc.player))
                && !e.isSpectator()
                && !e.isInvulnerable()
-               && (!slotEnabled || this.mc.player.getInventory().selectedSlot + 1 == requiredSlot)
+               && (!slotEnabled || this.activeSlot() + 1 == requiredSlot)
                && this.entityAllowed(e)
                && !(eyePos.squaredDistanceTo(point = this.aimPoint(e)) > reachSq)) {
                Vec2f delta = this.rotationTo(playerRot, eyePos, point);
@@ -138,6 +139,17 @@ public abstract class AimAssistModule extends Module {
          this.target = null;
          this.smoothedPoint = null;
       }
+   }
+
+   /** Slot the aim assist treats as selected. Auto Firework keeps the player on the rocket slot, so it reports the weapon slot instead. */
+   private int activeSlot() {
+      AutoFirework firework = SculkClient.get(AutoFirework.class);
+      return firework != null ? firework.effectiveSlot() : this.mc.player.getInventory().selectedSlot;
+   }
+
+   /** Entity the aim assist is currently locked onto, or null. */
+   public Entity currentTarget() {
+      return this.target;
    }
 
    private boolean entityAllowed(Entity e) {

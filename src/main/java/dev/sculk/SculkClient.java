@@ -11,6 +11,8 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import dev.sculk.module.modules.render.TargetEsp;
 import net.minecraft.client.render.RenderTickCounter;
 
 public class SculkClient implements ClientModInitializer {
@@ -48,6 +50,12 @@ public class SculkClient implements ClientModInitializer {
          friends.setEnabledSilently(false);
       }
 
+      WorldRenderEvents.LAST.register(context -> {
+         TargetEsp esp = get(TargetEsp.class);
+         if (esp != null && esp.isEnabled()) {
+            esp.render(context.matrixStack(), net.minecraft.client.MinecraftClient.getInstance().getRenderTickCounter().getTickDelta(true));
+         }
+      });
       ClientTickEvents.END_CLIENT_TICK.register((EndTick)client -> ModuleManager.tick());
       HudRenderCallback.EVENT.register((HudRenderCallback)(ctx, tickCounter) -> ModuleManager.renderHUD(ctx, tickCounter.getTickDelta(true)));
    }

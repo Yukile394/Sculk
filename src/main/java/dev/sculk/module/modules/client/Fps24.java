@@ -18,11 +18,16 @@ public final class Fps24 extends Module {
    private final NumberSetting saturation = new NumberSetting("Saturation", 52.0, 0.0, 100.0, 1.0);
    private final NumberSetting brightness = new NumberSetting("Brightness", 100.0, 20.0, 100.0, 1.0);
    private final NumberSetting opacity = new NumberSetting("Panel Opacity", 95.0, 20.0, 100.0, 1.0);
+   private final BooleanSetting sfFont = new BooleanSetting("SF Font", false).describe("ZeltrixWare SF font in the GUI (reopen the GUI)");
    private final ButtonSetting reset = new ButtonSetting("Reset colours", this::resetDefaults);
 
    public Fps24() {
       super("GUI Colors", "Changes the click GUI palette", Category.CLIENT);
-      this.addSettings(new Setting[]{this.rainbow, this.hue, this.saturation, this.brightness, this.opacity, this.reset});
+      this.addSettings(new Setting[]{this.rainbow, this.hue, this.saturation, this.brightness, this.opacity, this.sfFont, this.reset});
+   }
+
+   public boolean sfFont() {
+      return this.sfFont.get();
    }
 
    @Override
