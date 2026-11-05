@@ -1,6 +1,5 @@
 package dev.sculk.module.modules.combat;
 
-import dev.sculk.SculkClient;
 import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.setting.BooleanSetting;
@@ -54,11 +53,6 @@ public final class Fps12 extends Module {
 
    @Override
    public void onBufferUpdate() {
-      AutoFirework firework = SculkClient.get(AutoFirework.class);
-      if (firework != null && firework.takesOverTrigger()) {
-         return;
-      }
-
       if (this.mc.player != null && this.mc.world != null && this.mc.interactionManager != null) {
          if (this.mc.currentScreen == null) {
             ItemStack held = this.mc.player.getMainHandStack();
