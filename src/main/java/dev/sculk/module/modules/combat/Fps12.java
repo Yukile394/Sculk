@@ -17,6 +17,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.PotionItem;
 import net.minecraft.item.SwordItem;
+import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.hit.EntityHitResult;
@@ -26,21 +27,24 @@ public final class Fps12 extends Module {
    private static final double REACH = 3.0;
    private static final double TRACE_MARGIN = 1.5;
    private final BooleanSetting swordOnly = new BooleanSetting("Sword Only", false)
-      .describe("Sadece k\u0131l\u0131\u00e7/balta/iksir tutarken \u00e7al\u0131\u015f");
-   private final BooleanSetting waitCritical = new BooleanSetting("Wait Critical", false).describe("D\u00fc\u015ferken vur (critical)");
-   private final BooleanSetting onLeftClick = new BooleanSetting("On Left Click", false).describe("Sadece LMB bas\u0131l\u0131yken \u00e7al\u0131\u015f");
-   private final NumberSetting attackDelay = new NumberSetting("Attack Delay", 0.0, 0.0, 500.0, 1.0).describe("500ms base'e eklenen ms (smoothhud default=0)");
+      .describe("Sadece kilic/balta/iksir tutarken calis");
+   private final BooleanSetting waitCritical = new BooleanSetting("Wait Critical", false).describe("Duserken vur (critical)");
+   private final BooleanSetting onLeftClick = new BooleanSetting("On Left Click", false).describe("Sadece LMB basiliyken calis");
+   private final NumberSetting attackDelay = new NumberSetting("Attack Delay", 0.0, 0.0, 500.0, 1.0).describe("500ms base'e eklenen ms");
    private final NumberSetting slot = new NumberSetting("Slot", 0.0, 0.0, 9.0, 1.0).describe("0=hepsi, 1-9=o slot");
-   private final BooleanSetting lagGuard = new BooleanSetting("Lag Guard", false)
-      .describe("Sunucu tak\u0131ld\u0131\u011f\u0131nda vuru\u015fu bekle, tick ba\u015f\u0131na tek vuru\u015f");
+   private final BooleanSetting lagGuard = new BooleanSetting("Lag Guard", true)
+      .describe("Sunucu takildiginda vurusu bekle, tick basina tek vurus");
+   private final BooleanSetting rotationSync = new BooleanSetting("Rotation Sync", true)
+      .describe("Vurustan once rotation paketi gonder (Grim/Polar bypass)");
    private final Timer timer = new Timer();
    private Item lastItem;
    private boolean ready = true;
    private long firedTick = Long.MIN_VALUE;
+   private float lastYaw, lastPitch;
 
    public Fps12() {
-      super("Trigger Bot", "Ni\u015fandaki hedefe otomatik vuru\u015f", Category.COMBAT);
-      this.addSettings(new Setting[]{this.swordOnly, this.waitCritical, this.onLeftClick, this.attackDelay, this.slot, this.lagGuard});
+      super("Trigger Bot", "Nisandaki hedefe otomatik vurus", Category.COMBAT);
+      this.addSettings(new Setting[]{this.swordOnly, this.waitCritical, this.onLeftClick, this.attackDelay, this.slot, this.lagGuard, this.rotationSync});
    }
 
    @Override
@@ -63,7 +67,6 @@ public final class Fps12 extends Module {
                this.timer.reset();
                this.ready = true;
             }
-
             this.lastItem = heldItem;
             if (!this.swordOnly.get() || holdingSword || holdingPotion) {
                int slotVal = this.slot.getInt();
@@ -73,6 +76,9 @@ public final class Fps12 extends Module {
                      if (target != null) {
                         if (this.ready || this.attackReady(holdingSword)) {
                            if (!this.lagGuard.get() || this.holdForServer()) {
+                              if (this.rotationSync.get()) {
+                                 this.sendRotation(target);
+                              }
                               this.ready = false;
                               CombatUtils.hitEntity(target, true);
                               this.timer.reset();
@@ -86,20 +92,31 @@ public final class Fps12 extends Module {
       }
    }
 
+   private void sendRotation(Entity target) {
+      if (this.mc.getNetworkHandler() == null) return;
+      Vec3d eye = this.mc.player.getCameraPosVec(1.0F);
+      Vec3d aim = target.getBoundingBox().getCenter();
+      Vec3d diff = aim.subtract(eye);
+      float yaw = (float)(Math.toDegrees(Math.atan2(-diff.x, diff.z)));
+      float pitch = (float)(Math.toDegrees(Math.asin(-diff.y / diff.length())));
+      // GCD uyumlu kucuk step
+      float step = 0.5F;
+      float dYaw = MathHelper.wrapDegrees(yaw - this.mc.player.getYaw());
+      float dPitch = MathHelper.wrapDegrees(pitch - this.mc.player.getPitch());
+      float newYaw = this.mc.player.getYaw() + MathHelper.clamp(dYaw, -step, step);
+      float newPitch = this.mc.player.getPitch() + MathHelper.clamp(dPitch, -step, step);
+      this.mc.player.setYaw(newYaw);
+      this.mc.player.setPitch(newPitch);
+      this.mc.getNetworkHandler().sendPacket(new PlayerMoveC2SPacket.LookAndOnGround(newYaw, newPitch, this.mc.player.isOnGround()));
+   }
+
    private boolean holdForServer() {
-      if (ServerClock.jammed()) {
-         return false;
-      } else {
-         long serverTick = ServerClock.tick();
-         if (serverTick == Long.MIN_VALUE) {
-            return true;
-         } else if (serverTick == this.firedTick) {
-            return false;
-         } else {
-            this.firedTick = serverTick;
-            return true;
-         }
-      }
+      if (ServerClock.jammed()) return false;
+      long serverTick = ServerClock.tick();
+      if (serverTick == Long.MIN_VALUE) return true;
+      if (serverTick == this.firedTick) return false;
+      this.firedTick = serverTick;
+      return true;
    }
 
    private boolean attackReady(boolean holdingSword) {
@@ -135,12 +152,9 @@ public final class Fps12 extends Module {
       EntityHitResult hit = ProjectileUtil.raycast(
          this.mc.player, eyePos, endPos, box, ex -> !ex.isSpectator() && ex.canHit() && ex.isAlive() && !Friends.isAlly(ex), 9.0
       );
-      if (hit == null) {
-         return null;
-      } else {
-         Entity e = hit.getEntity();
-         return e instanceof LivingEntity && e.isAlive() && !Friends.isAlly(e) ? e : null;
-      }
+      if (hit == null) return null;
+      Entity e = hit.getEntity();
+      return e instanceof LivingEntity && e.isAlive() && !Friends.isAlly(e) ? e : null;
    }
 
    private Entity findEntityScan() {
@@ -149,54 +163,34 @@ public final class Fps12 extends Module {
       double reachSq = 9.0;
       Entity best = null;
       double bestDist = Double.MAX_VALUE;
-
       for (Entity e : this.mc.world.getEntities()) {
-         if (e != this.mc.player
-            && e.isAlive()
-            && e.canHit()
-            && !e.isSpectator()
-            && !Friends.isAlly(e)
-            && e instanceof LivingEntity
-            && !(e.squaredDistanceTo(eyePos) > reachSq)) {
+         if (e != this.mc.player && e.isAlive() && e.canHit() && !e.isSpectator() && !Friends.isAlly(e)
+            && e instanceof LivingEntity && !(e.squaredDistanceTo(eyePos) > reachSq)) {
             Box eBox = e.getBoundingBox();
             if (this.rayBoxIntersect(eyePos, lookVec, eBox, 3.0)) {
                double dist = e.squaredDistanceTo(eyePos);
-               if (dist < bestDist) {
-                  bestDist = dist;
-                  best = e;
-               }
+               if (dist < bestDist) { bestDist = dist; best = e; }
             }
          }
       }
-
       return best;
    }
 
    private boolean rayBoxIntersect(Vec3d origin, Vec3d dir, Box box, double maxDist) {
-      double enter = Double.NEGATIVE_INFINITY;
-      double exit = Double.POSITIVE_INFINITY;
-      double[] o = new double[]{origin.x, origin.y, origin.z};
-      double[] d = new double[]{dir.x, dir.y, dir.z};
-      double[] min = new double[]{box.minX, box.minY, box.minZ};
-      double[] max = new double[]{box.maxX, box.maxY, box.maxZ};
-
+      double enter = Double.NEGATIVE_INFINITY, exit = Double.POSITIVE_INFINITY;
+      double[] o = {origin.x, origin.y, origin.z};
+      double[] d = {dir.x, dir.y, dir.z};
+      double[] min = {box.minX, box.minY, box.minZ};
+      double[] max = {box.maxX, box.maxY, box.maxZ};
       for (int i = 0; i < 3; i++) {
          if (d[i] != 0.0) {
             double t1 = (min[i] - o[i]) / d[i];
             double t2 = (max[i] - o[i]) / d[i];
-            if (t1 > t2) {
-               double tmp = t1;
-               t1 = t2;
-               t2 = tmp;
-            }
-
+            if (t1 > t2) { double tmp = t1; t1 = t2; t2 = tmp; }
             enter = Math.max(enter, t1);
             exit = Math.min(exit, t2);
-         } else if (o[i] < min[i] || o[i] > max[i]) {
-            return false;
-         }
+         } else if (o[i] < min[i] || o[i] > max[i]) return false;
       }
-
       return enter <= exit && exit >= 0.0 && enter <= maxDist;
    }
 }
