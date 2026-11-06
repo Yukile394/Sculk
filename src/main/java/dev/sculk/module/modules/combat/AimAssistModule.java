@@ -121,9 +121,10 @@ public abstract class AimAssistModule extends Module {
 
    /**
     * Grim'in AimProcessor'i rotation delta'larin GCD'sini alarak sensitivity'yi
-    * tersine muhendislikle buluyor [citation:4][citation:21]. Bu metot, gonderilen
-    * her rotation'i oyuncunun gercek mouse sensitivity'sine uygun GCD adimlarina
-    * yuvarlayarak "robotik" olmayan, insan benzeri bir delta uretir.
+    * tersine muhendislikle buluyor. Bu metot, gonderilen her rotation'i
+    * oyuncunun gercek mouse sensitivity'sine uygun GCD adimlarina yuvarlayarak
+    * "robotik" olmayan, insan benzeri bir delta uretir.
+    * Polar ML icin mikro jitter eklenir -> tam yuvarlama robotik gorunmez.
     */
    private float applyGCD(float value, boolean yaw) {
       float sensitivity = this.mc.options.getMouseSensitivity().getValue().floatValue();
@@ -132,7 +133,6 @@ public abstract class AimAssistModule extends Module {
       if (gcd < 0.0001F) gcd = 0.0001F;
       float base = yaw ? this.gcdYaw : this.gcdPitch;
       float delta = MathHelper.wrapDegrees(value - base);
-      // Insan benzeri mikro jitter ekle (tam yuvarlama robotik gorunur)
       float jitter = (float)((Math.random() - 0.5) * gcd * 0.3F);
       float quantized = Math.round((delta + jitter) / gcd) * gcd;
       float result = base + quantized;
@@ -191,8 +191,8 @@ public abstract class AimAssistModule extends Module {
       float x = delta.x, y = delta.y;
       float len = MathHelper.sqrt(x * x + y * y);
       float maxMove = maxAngle * 0.26F;
-      // Daha dusuk factor = daha az snap, daha insan benzeri
-      float factor = (len > maxMove ? 0.22F : (len > 0.35F ? 0.18F : 0.15F)) * lockSpeed;
+      // Dusuk factor = daha az snap, Polar ML dostu
+      float factor = (len > maxMove ? 0.18F : (len > 0.35F ? 0.15F : 0.12F)) * lockSpeed;
       float mx = x * factor, my = y * factor;
       float moveLen = MathHelper.sqrt(mx * mx + my * my);
       if (moveLen > maxMove && moveLen > 0.0F) {
@@ -206,7 +206,9 @@ public abstract class AimAssistModule extends Module {
    private Vec3d predictPoint(Entity e, Vec3d eyePos, float dt, boolean sameTarget) {
       Vec3d point = this.aimPoint(e);
       double dist = eyePos.distanceTo(point);
-      Vec3d predicted = point.subtract(e.getVelocity().multiply(dist * 0.03));
+      // Polar ML icin prediction'i kis -> hitbox disina nisan almayi engelle
+      double predFactor = this.mc.player.isSprinting() ? 0.02 : 0.01;
+      Vec3d predicted = point.subtract(e.getVelocity().multiply(dist * predFactor));
       if (sameTarget && this.smoothedPoint != null) {
          float factor = 1.0F - (float)Math.exp((double)(-14.0F * dt));
          factor = MathHelper.clamp(factor, 0.06F, 0.22F);
