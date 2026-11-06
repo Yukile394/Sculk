@@ -1,7 +1,7 @@
 package dev.sculk.module.modules.combat;
 
 import dev.sculk.SculkClient;
-import dev.sculk.module.C
+import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.setting.BooleanSetting;
 import dev.sculk.module.setting.ModeSetting;
