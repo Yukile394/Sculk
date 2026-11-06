@@ -8,7 +8,6 @@ import dev.sculk.module.setting.Setting;
 import dev.sculk.util.CombatUtils;
 import dev.sculk.util.Friends;
 import dev.sculk.util.ServerClock;
-import dev.sculk.util.Timer;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.projectile.ProjectileUtil;
@@ -23,89 +22,89 @@ import net.minecraft.util.hit.EntityHitResult;
 import org.lwjgl.glfw.GLFW;
 
 public final class Fps12 extends Module {
-   // Reach 3.0 -> 2.85 : Grim/Polar latency toleransinin altinda kal
    private static final double REACH = 2.85;
+   // Hard CPS cap: 100ms = max 10 CPS (legit oyuncu 1-4 CPS, guvenli tavan)
+   private static final long MIN_ATTACK_GAP_MS = 100L;
+
    private final BooleanSetting swordOnly = new BooleanSetting("Sword Only", false)
       .describe("Sadece kilic/balta/iksir tutarken calis");
    private final BooleanSetting waitCritical = new BooleanSetting("Wait Critical", false).describe("Duserken vur (critical)");
    private final BooleanSetting onLeftClick = new BooleanSetting("On Left Click", false).describe("Sadece LMB basiliyken calis");
-   private final NumberSetting attackDelay = new NumberSetting("Attack Delay", 50.0, 0.0, 500.0, 1.0)
-      .describe("500ms base'e eklenen ms (legit aralik icin 50 onerilir)");
    private final NumberSetting slot = new NumberSetting("Slot", 0.0, 0.0, 9.0, 1.0).describe("0=hepsi, 1-9=o slot");
    private final BooleanSetting lagGuard = new BooleanSetting("Lag Guard", true)
-      .describe("Sunucu takildiginda vurusu bekle, tick basina tek vurus");
-   private final Timer timer = new Timer();
-   private Item lastItem;
-   private boolean ready = true;
+      .describe("Sunucu takildiginda vurusu bekle");
+
+   private long lastAttackMs = 0L;
+   private long lastFallbackMs = 0L;
    private long firedTick = Long.MIN_VALUE;
 
    public Fps12() {
       super("Trigger Bot", "Nisandaki hedefe otomatik vurus", Category.COMBAT);
-      this.addSettings(new Setting[]{this.swordOnly, this.waitCritical, this.onLeftClick, this.attackDelay, this.slot, this.lagGuard});
+      this.addSettings(new Setting[]{this.swordOnly, this.waitCritical, this.onLeftClick, this.slot, this.lagGuard});
    }
 
    @Override
    public void onEnable() {
-      this.timer.reset();
-      this.ready = true;
-      this.lastItem = null;
+      this.lastAttackMs = 0L;
+      this.lastFallbackMs = 0L;
       this.firedTick = Long.MIN_VALUE;
    }
 
    @Override
    public void onBufferUpdate() {
-      if (this.mc.player != null && this.mc.world != null && this.mc.interactionManager != null) {
-         if (this.mc.currentScreen == null) {
-            ItemStack held = this.mc.player.getMainHandStack();
-            Item heldItem = held.getItem();
-            boolean holdingSword = heldItem instanceof SwordItem || heldItem instanceof AxeItem;
-            boolean holdingPotion = heldItem instanceof PotionItem;
-            if (heldItem != this.lastItem) {
-               this.timer.reset();
-               this.ready = true;
-            }
-            this.lastItem = heldItem;
-            if (!this.swordOnly.get() || holdingSword || holdingPotion) {
-               int slotVal = this.slot.getInt();
-               if (slotVal <= 0 || this.mc.player.getInventory().selectedSlot + 1 == slotVal) {
-                  if (!this.onLeftClick.get() || GLFW.glfwGetMouseButton(this.mc.getWindow().getHandle(), 0) == 1) {
-                     Entity target = this.findTarget();
-                     if (target != null) {
-                        if (this.ready || this.attackReady(holdingSword)) {
-                           if (!this.lagGuard.get() || this.holdForServer()) {
-                              this.ready = false;
-                              CombatUtils.hitEntity(target, true);
-                              this.timer.reset();
-                           }
-                        }
-                     }
-                  }
-               }
-            }
-         }
+      if (this.mc.player == null || this.mc.world == null || this.mc.interactionManager == null) return;
+      if (this.mc.currentScreen != null) return;
+
+      ItemStack held = this.mc.player.getMainHandStack();
+      Item heldItem = held.getItem();
+      boolean holdingSword = heldItem instanceof SwordItem || heldItem instanceof AxeItem;
+      boolean holdingPotion = heldItem instanceof PotionItem;
+      if (this.swordOnly.get() && !holdingSword && !holdingPotion) return;
+
+      int slotVal = this.slot.getInt();
+      if (slotVal > 0 && this.mc.player.getInventory().selectedSlot + 1 != slotVal) return;
+
+      if (this.onLeftClick.get() && GLFW.glfwGetMouseButton(this.mc.getWindow().getHandle(), 0) != 1) return;
+
+      // ===== GATE 1: Esyanin gercek cooldown'u =====
+      // Sword: ~1.6 CPS, Axe: ~1.0-1.25 CPS, Fist: ~4 CPS
+      // Bu gate tek basina 100 CPS'i imkansiz kilar
+      if (this.mc.player.getAttackCooldownProgress(0.0F) < 0.98F) return;
+
+      // ===== GATE 2: Hard CPS cap (bug defensive) =====
+      long now = System.currentTimeMillis();
+      if (now - this.lastAttackMs < MIN_ATTACK_GAP_MS) return;
+
+      // ===== GATE 3: Wait Critical (yukselirken vurma) =====
+      if (this.waitCritical.get() && holdingSword && !this.mc.player.isFallFlying()) {
+         if (!this.mc.player.isOnGround() && this.mc.player.getVelocity().y >= 0.0) return;
       }
+
+      // ===== GATE 4: Hedef bul =====
+      Entity target = this.findTarget();
+      if (target == null) return;
+
+      // ===== GATE 5: Server tick senkronizasyonu =====
+      if (this.lagGuard.get() && !this.holdForServer()) return;
+
+      // ===== ATES =====
+      this.lastAttackMs = now;
+      CombatUtils.hitEntity(target, true);
    }
 
    private boolean holdForServer() {
       if (ServerClock.jammed()) return false;
       long serverTick = ServerClock.tick();
-      if (serverTick == Long.MIN_VALUE) return true;
+      if (serverTick == Long.MIN_VALUE) {
+         // ServerClock yoksa frame-time fallback (max 20/s)
+         long now = System.currentTimeMillis();
+         if (now - this.lastFallbackMs < 50L) return false;
+         this.lastFallbackMs = now;
+         return true;
+      }
       if (serverTick == this.firedTick) return false;
       this.firedTick = serverTick;
       return true;
-   }
-
-   private boolean attackReady(boolean holdingSword) {
-      long base = 500L + (long)this.attackDelay.getInt();
-      if (!holdingSword || !this.waitCritical.get() || this.mc.player.isFallFlying()) {
-         return this.mc.player.getAttackCooldownProgress(0.5F) < 1.0F ? false : this.timer.delay(base);
-      } else if (this.mc.player.isOnGround()) {
-         return this.mc.player.getAttackCooldownProgress(0.5F) < 1.0F ? false : this.timer.delay(base);
-      } else if (this.mc.player.getVelocity().y >= 0.0) {
-         return false;
-      } else {
-         return this.mc.player.getAttackCooldownProgress(0.5F) < 0.85F ? false : this.timer.delay(base);
-      }
    }
 
    private Entity findTarget() {
