@@ -118,7 +118,6 @@ public abstract class AimAssistModule extends Module {
       }
    }
 
-   /** GCD simülasyonu: Polar/Grim rotation delta'yi mouse sensitivity'sine gore kontrol eder */
    private float applyGCD(float value, boolean yaw) {
       float sensitivity = this.mc.options.getMouseSensitivity().getValue().floatValue();
       float f = sensitivity * 0.6F + 0.2F;
@@ -183,7 +182,6 @@ public abstract class AimAssistModule extends Module {
       float x = delta.x, y = delta.y;
       float len = MathHelper.sqrt(x * x + y * y);
       float maxMove = maxAngle * 0.26F;
-      // Daha yumusak factor - snap engeli
       float factor = (len > maxMove ? 0.28F : (len > 0.35F ? 0.24F : 0.2F)) * lockSpeed;
       float mx = x * factor, my = y * factor;
       float moveLen = MathHelper.sqrt(mx * mx + my * my);
