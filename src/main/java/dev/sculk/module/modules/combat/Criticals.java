@@ -1,5 +1,6 @@
 package dev.sculk.module.modules.combat;
 
+import dev.sculk.SculkClient;
 import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.setting.ModeSetting;
@@ -10,97 +11,86 @@ import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.decoration.EndCrystalEntity;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
-import net.minecraft.util.math.MathHelper;
 
 public final class Criticals extends Module {
    public static boolean cancelCrit;
    private final ModeSetting<Criticals.Mode> mode = new ModeSetting<>("Mode", Criticals.Mode.UpdatedNCP)
       .describe("Packet pattern sent before every attack");
+   private long lastCritTick = Long.MIN_VALUE;
+   private long lastCritMs = 0L;
+   private int cooldownTicks = 0;
 
    public Criticals() {
-      super("Criticals", "Turns every hit into a critical hit (ZeltrixWare modes)", Category.COMBAT);
+      super("Criticals", "Turns every hit into a critical hit", Category.COMBAT);
       this.addSettings(new Setting[]{this.mode});
    }
 
    public void onAttack(Entity target) {
-      if (cancelCrit || target == null || target instanceof EndCrystalEntity) {
+      if (cancelCrit || target == null || target instanceof EndCrystalEntity) return;
+      ClientPlayerEntity player = this.getMC().player;
+      if (player == null || this.getMC().world == null) return;
+
+      // AimAssist aktifse crit'i daha muhafazakar yap -> Polar ML flag engeli
+      boolean aimActive = this.isAimAssistActive();
+      int baseCooldown = aimActive ? 6 : 3;
+
+      if (this.cooldownTicks > 0) {
+         this.cooldownTicks--;
          return;
       }
 
-      ClientPlayerEntity player = this.getMC().player;
-      if (player == null || this.getMC().world == null) {
-         return;
+      long tick = ServerClock.tick();
+      if (tick != Long.MIN_VALUE) {
+         if (tick == this.lastCritTick) return;
+         this.lastCritTick = tick;
+      } else {
+         long now = System.currentTimeMillis();
+         long minGap = aimActive ? 200L : 100L;
+         if (now - this.lastCritMs < minGap) return;
+         this.lastCritMs = now;
       }
 
       boolean grim = this.mode.is(Criticals.Mode.Grim);
-      if ((player.isOnGround() || player.getAbilities().flying || grim) && !player.isInLava() && !player.isSubmergedInWater()) {
-         // ServerClock ile tick senkronizasyonu
-         if (!grim && ServerClock.jammed()) {
-            return;
-         }
+      if ((player.isOnGround() || player.getAbilities().flying || grim)
+         && !player.isInLava() && !player.isSubmergedInWater()) {
          switch (this.mode.getValue()) {
-            case Ncp:
-               this.packet(player, 0.0625, false);
-               this.packet(player, 0.0, false);
-               break;
-            case Strict:
-               this.packet(player, 0.062600301692775, false);
-               this.packet(player, 0.07260029960661, false);
-               this.packet(player, 0.0, false);
-               this.packet(player, 0.0, false);
-               break;
-            case OldNCP:
-               this.packet(player, 1.058293536E-5, false);
-               this.packet(player, 9.16580235E-6, false);
-               this.packet(player, 1.0371854E-7, false);
-               break;
-            case UpdatedNCP:
-               // Polar/Grim icin daha guvenli mikro delta
-               this.packet(player, 2.71875E-7, false);
-               this.packet(player, 0.0, false);
-               break;
-            case Grim:
-               // Grim icin onceki pozisyonu koru, sadece onGround false gonder
-               if (!player.isOnGround()) {
-                  this.packetFull(player, 0.0, false);
-               } else {
-                  // Grim icin yerden kalkma simulasyonu
-                  this.packet(player, 1.0E-7, false);
-                  this.packet(player, 0.0, false);
-               }
-               break;
-            case Polar:
-               // Polar icin 0.0001 delta + rotation sync
-               this.packet(player, 1.0E-4, false);
-               this.packetFull(player, 0.0, false);
-               break;
+            case Ncp -> { this.packet(player, 0.0625); this.packet(player, 0.0); }
+            case Strict -> {
+               this.packet(player, 0.062600301692775);
+               this.packet(player, 0.07260029960661);
+               this.packet(player, 0.0);
+            }
+            case OldNCP -> {
+               this.packet(player, 1.058293536E-5);
+               this.packet(player, 9.16580235E-6);
+               this.packet(player, 1.0371854E-7);
+            }
+            case UpdatedNCP -> { this.packet(player, 2.71875E-7); this.packet(player, 0.0); }
+            case Grim -> {
+               if (!player.isOnGround()) this.packet(player, -1.0E-6);
+               else { this.packet(player, 1.0E-7); this.packet(player, 0.0); }
+            }
+            case Polar -> { this.packet(player, 1.0E-4); this.packet(player, 0.0); }
          }
+         this.cooldownTicks = baseCooldown;
       }
    }
 
-   private void packet(ClientPlayerEntity player, double yDelta, boolean full) {
+   private boolean isAimAssistActive() {
+      for (Module module : SculkClient.modules()) {
+         if (module instanceof AimAssistModule && module.isEnabled()) return true;
+      }
+      return false;
+   }
+
+   private void packet(ClientPlayerEntity player, double yDelta) {
       ClientPlayNetworkHandler network = this.getMC().getNetworkHandler();
       if (network == null) return;
       double y = player.getY() + yDelta;
-      // NaN/inf korumasi
       if (Double.isNaN(y) || Double.isInfinite(y)) return;
       network.sendPacket(new PlayerMoveC2SPacket.PositionAndOnGround(
          player.getX(), y, player.getZ(), false));
    }
 
-   private void packetFull(ClientPlayerEntity player, double yDelta, boolean onGround) {
-      ClientPlayNetworkHandler network = this.getMC().getNetworkHandler();
-      if (network == null) return;
-      double y = player.getY() + yDelta;
-      if (Double.isNaN(y) || Double.isInfinite(y)) return;
-      // GCD uyumlu yaw/pitch
-      float yaw = player.getYaw();
-      float pitch = player.getPitch();
-      network.sendPacket(new PlayerMoveC2SPacket.Full(
-         player.getX(), y, player.getZ(), yaw, pitch, onGround));
-   }
-
-   public static enum Mode {
-      Ncp, Strict, OldNCP, UpdatedNCP, Grim, Polar;
-   }
+   public static enum Mode { Ncp, Strict, OldNCP, UpdatedNCP, Grim, Polar; }
 }
