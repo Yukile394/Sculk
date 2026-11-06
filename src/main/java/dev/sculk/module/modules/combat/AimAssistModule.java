@@ -26,11 +26,11 @@ import net.minecraft.world.RaycastContext.ShapeType;
 
 public abstract class AimAssistModule extends Module {
    private final BooleanSetting players = new BooleanSetting("Player", true);
-   private final NumberSetting distance = new NumberSetting("Distance", 3.92, 0.5, 150.0, 0.01);
+   private final NumberSetting distance = new NumberSetting("Distance", 3.5, 0.5, 150.0, 0.01);
    private final NumberSetting fov = new NumberSetting("FOV", 92.0, 1.0, 360.0, 1.0);
    private final BooleanSetting slot = new BooleanSetting("Slot", true);
    private final NumberSetting slots = new NumberSetting("Slots", 1.0, 1.0, 9.0, 1.0);
-   private final NumberSetting lockSpeed = new NumberSetting("Lock Speed", 0.18, 0.05, 5.0, 0.01)
+   private final NumberSetting lockSpeed = new NumberSetting("Lock Speed", 0.12, 0.05, 5.0, 0.01)
       .describe("Dusuk = daha az snap, anti-cheat dostu");
    private final BooleanSetting precise = new BooleanSetting("Precise", false);
    private final NumberSetting preciseAngle = new NumberSetting("Angle", 30.06, 1.0, 180.0, 0.01);
@@ -38,7 +38,7 @@ public abstract class AimAssistModule extends Module {
    private final BooleanSetting preciseNowalls = new BooleanSetting("Nowalls", true);
    private final BooleanSetting monsters = new BooleanSetting("Monsters", false);
    private final BooleanSetting gcdBypass = new BooleanSetting("GCD Bypass", true)
-      .describe("Mouse delta'yi GCD'ye uyumlu hale getir (Polar/Grim)");
+      .describe("Mouse delta'yi GCD'ye uyumlu hale getir (Grim/Polar)");
    private final ModeSetting<AimAssistModule.AimPart> aimPart = new ModeSetting<>("Aim Part", AimAssistModule.AimPart.Body)
       .describe("Head/Body/Legs/Feet sec; Auto = smoothhud varsayilan");
    private Entity target;
@@ -55,6 +55,7 @@ public abstract class AimAssistModule extends Module {
    @Override
    public void onEnable() {
       this.target = null; this.smoothedPoint = null; this.lastTime = -1L;
+      this.gcdYaw = 0f; this.gcdPitch = 0f;
    }
 
    @Override
@@ -118,6 +119,12 @@ public abstract class AimAssistModule extends Module {
       }
    }
 
+   /**
+    * Grim'in AimProcessor'i rotation delta'larin GCD'sini alarak sensitivity'yi
+    * tersine muhendislikle buluyor [citation:4][citation:21]. Bu metot, gonderilen
+    * her rotation'i oyuncunun gercek mouse sensitivity'sine uygun GCD adimlarina
+    * yuvarlayarak "robotik" olmayan, insan benzeri bir delta uretir.
+    */
    private float applyGCD(float value, boolean yaw) {
       float sensitivity = this.mc.options.getMouseSensitivity().getValue().floatValue();
       float f = sensitivity * 0.6F + 0.2F;
@@ -125,7 +132,9 @@ public abstract class AimAssistModule extends Module {
       if (gcd < 0.0001F) gcd = 0.0001F;
       float base = yaw ? this.gcdYaw : this.gcdPitch;
       float delta = MathHelper.wrapDegrees(value - base);
-      float quantized = Math.round(delta / gcd) * gcd;
+      // Insan benzeri mikro jitter ekle (tam yuvarlama robotik gorunur)
+      float jitter = (float)((Math.random() - 0.5) * gcd * 0.3F);
+      float quantized = Math.round((delta + jitter) / gcd) * gcd;
       float result = base + quantized;
       if (yaw) this.gcdYaw = result; else this.gcdPitch = result;
       return result;
@@ -182,7 +191,8 @@ public abstract class AimAssistModule extends Module {
       float x = delta.x, y = delta.y;
       float len = MathHelper.sqrt(x * x + y * y);
       float maxMove = maxAngle * 0.26F;
-      float factor = (len > maxMove ? 0.28F : (len > 0.35F ? 0.24F : 0.2F)) * lockSpeed;
+      // Daha dusuk factor = daha az snap, daha insan benzeri
+      float factor = (len > maxMove ? 0.22F : (len > 0.35F ? 0.18F : 0.15F)) * lockSpeed;
       float mx = x * factor, my = y * factor;
       float moveLen = MathHelper.sqrt(mx * mx + my * my);
       if (moveLen > maxMove && moveLen > 0.0F) {
@@ -199,7 +209,7 @@ public abstract class AimAssistModule extends Module {
       Vec3d predicted = point.subtract(e.getVelocity().multiply(dist * 0.03));
       if (sameTarget && this.smoothedPoint != null) {
          float factor = 1.0F - (float)Math.exp((double)(-14.0F * dt));
-         factor = MathHelper.clamp(factor, 0.08F, 0.28F);
+         factor = MathHelper.clamp(factor, 0.06F, 0.22F);
          this.smoothedPoint = this.smoothedPoint.lerp(predicted, (double)factor);
          return this.smoothedPoint;
       } else {
