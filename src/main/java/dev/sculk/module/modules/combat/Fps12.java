@@ -19,6 +19,7 @@ import net.minecraft.item.PotionItem;
 import net.minecraft.item.SwordItem;
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket;
 import net.minecraft.util.math.Box;
+import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.hit.EntityHitResult;
 import org.lwjgl.glfw.GLFW;
@@ -40,7 +41,9 @@ public final class Fps12 extends Module {
    private Item lastItem;
    private boolean ready = true;
    private long firedTick = Long.MIN_VALUE;
-   private float lastYaw, lastPitch;
+   private long lastRotationTick = Long.MIN_VALUE;
+   private Entity pendingAttack;
+   private long pendingTick = Long.MIN_VALUE;
 
    public Fps12() {
       super("Trigger Bot", "Nisandaki hedefe otomatik vurus", Category.COMBAT);
@@ -53,6 +56,25 @@ public final class Fps12 extends Module {
       this.ready = true;
       this.lastItem = null;
       this.firedTick = Long.MIN_VALUE;
+      this.lastRotationTick = Long.MIN_VALUE;
+      this.pendingAttack = null;
+      this.pendingTick = Long.MIN_VALUE;
+   }
+
+   @Override
+   public void onTick() {
+      if (this.pendingAttack != null) {
+         long tick = ServerClock.tick();
+         if (tick == Long.MIN_VALUE || tick != this.pendingTick) {
+            if (this.pendingAttack.isAlive() && !this.pendingAttack.isRemoved()) {
+               this.ready = false;
+               CombatUtils.hitEntity(this.pendingAttack, true);
+               this.timer.reset();
+            }
+            this.pendingAttack = null;
+            this.pendingTick = Long.MIN_VALUE;
+         }
+      }
    }
 
    @Override
@@ -72,16 +94,27 @@ public final class Fps12 extends Module {
                int slotVal = this.slot.getInt();
                if (slotVal <= 0 || this.mc.player.getInventory().selectedSlot + 1 == slotVal) {
                   if (!this.onLeftClick.get() || GLFW.glfwGetMouseButton(this.mc.getWindow().getHandle(), 0) == 1) {
+                     if (this.pendingAttack != null) return;
                      Entity target = this.findTarget();
                      if (target != null) {
                         if (this.ready || this.attackReady(holdingSword)) {
                            if (!this.lagGuard.get() || this.holdForServer()) {
                               if (this.rotationSync.get()) {
                                  this.sendRotation(target);
+                                 this.pendingAttack = target;
+                                 long tick = ServerClock.tick();
+                                 this.pendingTick = tick == Long.MIN_VALUE ? Long.MIN_VALUE : tick;
+                                 if (tick == Long.MIN_VALUE) {
+                                    this.ready = false;
+                                    CombatUtils.hitEntity(target, true);
+                                    this.timer.reset();
+                                    this.pendingAttack = null;
+                                 }
+                              } else {
+                                 this.ready = false;
+                                 CombatUtils.hitEntity(target, true);
+                                 this.timer.reset();
                               }
-                              this.ready = false;
-                              CombatUtils.hitEntity(target, true);
-                              this.timer.reset();
                            }
                         }
                      }
@@ -94,13 +127,18 @@ public final class Fps12 extends Module {
 
    private void sendRotation(Entity target) {
       if (this.mc.getNetworkHandler() == null) return;
+      long tick = ServerClock.tick();
+      if (tick != Long.MIN_VALUE) {
+         if (tick == this.lastRotationTick) return;
+         this.lastRotationTick = tick;
+      }
       Vec3d eye = this.mc.player.getCameraPosVec(1.0F);
       Vec3d aim = target.getBoundingBox().getCenter();
       Vec3d diff = aim.subtract(eye);
+      if (diff.lengthSquared() == 0.0) return;
       float yaw = (float)(Math.toDegrees(Math.atan2(-diff.x, diff.z)));
       float pitch = (float)(Math.toDegrees(Math.asin(-diff.y / diff.length())));
-      // GCD uyumlu kucuk step
-      float step = 0.5F;
+      float step = 0.35F;
       float dYaw = MathHelper.wrapDegrees(yaw - this.mc.player.getYaw());
       float dPitch = MathHelper.wrapDegrees(pitch - this.mc.player.getPitch());
       float newYaw = this.mc.player.getYaw() + MathHelper.clamp(dYaw, -step, step);
