@@ -1,6 +1,5 @@
 package dev.sculk.module.modules.combat;
 
-import dev.sculk.SculkClient;
 import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.setting.BooleanSetting;
@@ -12,13 +11,10 @@ import dev.sculk.util.Timer;
 import net.minecraft.client.network.ClientPlayerEntity;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
-import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.Items;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
-import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 
 /**
@@ -28,12 +24,15 @@ import net.minecraft.util.math.Vec3d;
  * selection snaps back to the rocket slot, at a human-paced interval, never while grounded.
  *
  * Auto-flight: while gliding with an open elytra, rockets fire automatically to sustain flight.
+ *
+ * focus() is display-only (TargetEsp): nearest living entity in range. No hitting happens here.
  */
 public final class AutoFirework extends Module {
    private static final long RESTORE_AFTER = 100L;
    // Orta hizli slot swap: anlik degil, 180-320ms arasi rastgele -> instant-switch heuristic bypass
    private static final long SLOT_SWAP_MIN_MS = 180L;
    private static final long SLOT_SWAP_MAX_MS = 320L;
+   private static final double FOCUS_RANGE = 3.2;
 
    private final ModeSetting<AutoFirework.Mode> mode = new ModeSetting<>("Mode", AutoFirework.Mode.Interval)
       .describe("Interval = every delay; Speed = only when you slow down");
@@ -60,6 +59,7 @@ public final class AutoFirework extends Module {
    private int rememberedWeapon = -1;
    private int rocketSlotIndex = -1;
    private long nextSlotSwapAt = 0L;
+   private Entity focus;
 
    public AutoFirework() {
       super("Auto Firework", "Fires elytra rockets automatically while gliding and locks the rocket slot", Category.COMBAT);
@@ -83,6 +83,7 @@ public final class AutoFirework extends Module {
       this.tempPrevious = -1;
       this.rememberedWeapon = -1;
       this.nextSlotSwapAt = 0L;
+      this.focus = null;
       if (this.getMC().player != null) {
          int rocket = this.findRocketSlot();
          int selected = this.getMC().player.getInventory().selectedSlot;
@@ -98,6 +99,12 @@ public final class AutoFirework extends Module {
       this.rocketSlotIndex = -1;
       this.rememberedWeapon = -1;
       this.nextSlotSwapAt = 0L;
+      this.focus = null;
+   }
+
+   /** Closest living entity in range, display-only for TargetEsp. No hit logic reads this. */
+   public Entity focus() {
+      return this.isEnabled() && this.focus != null && this.focus.isAlive() ? this.focus : null;
    }
 
    /** Slot (0-8) that Aim Assist should treat as the selected one. No combat swap anymore, so this is just the raw selection. */
@@ -114,6 +121,8 @@ public final class AutoFirework extends Module {
          if (this.mc.currentScreen == null && !player.isDead()) {
             this.rocketSlotIndex = this.findRocketSlot();
             PlayerInventory inventory = player.getInventory();
+
+            this.focus = this.nearestEnemy(player);
 
             boolean grounded = player.isOnGround();
             boolean gliding = player.isFallFlying();
@@ -132,7 +141,7 @@ public final class AutoFirework extends Module {
 
             // elytra acikken kanat acma durumunda otomatik roket zorunlu aktif
             boolean forceAutoFlight = gliding;
-            if (forceAutoFlight || (!this.onlyGliding.get())) {
+            if (forceAutoFlight || !this.onlyGliding.get()) {
                this.rocketTick(true);
             } else {
                this.rocketTick(false);
@@ -144,6 +153,22 @@ public final class AutoFirework extends Module {
    private void scheduleNextSwap(long now) {
       long span = SLOT_SWAP_MAX_MS - SLOT_SWAP_MIN_MS;
       this.nextSlotSwapAt = now + SLOT_SWAP_MIN_MS + (long)(Math.random() * (double)span);
+   }
+
+   private Entity nearestEnemy(ClientPlayerEntity player) {
+      Entity best = null;
+      double bestDistance = Double.MAX_VALUE;
+      for (Entity entity : this.mc.world.getEntities()) {
+         if (entity != player && entity instanceof LivingEntity living && living.isAlive()
+            && !entity.isSpectator() && !Friends.isAlly(entity)) {
+            double distance = player.getEyePos().distanceTo(entity.getPos());
+            if (distance <= FOCUS_RANGE && distance < bestDistance) {
+               bestDistance = distance;
+               best = entity;
+            }
+         }
+      }
+      return best;
    }
 
    // ───────────────────────────── rockets ─────────────────────────────
