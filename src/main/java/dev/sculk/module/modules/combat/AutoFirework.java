@@ -25,6 +25,10 @@ import net.minecraft.util.math.Vec3d;
  *
  * Auto-flight: while gliding with an open elytra, rockets fire automatically to sustain flight.
  *
+ * effectiveSlot(): AimAssist reads this instead of raw selectedSlot, so that while this module
+ * has parked us on the rocket slot, AimAssist's slot-requirement check still sees the weapon
+ * slot the player was actually on before the swap (no legit-looking "wrong slot" gap in packets).
+ *
  * focus() is display-only (TargetEsp): nearest living entity in range. No hitting happens here.
  */
 public final class AutoFirework extends Module {
@@ -107,10 +111,25 @@ public final class AutoFirework extends Module {
       return this.isEnabled() && this.focus != null && this.focus.isAlive() ? this.focus : null;
    }
 
-   /** Slot (0-8) that Aim Assist should treat as the selected one. No combat swap anymore, so this is just the raw selection. */
+   /**
+    * Slot (0-8) that AimAssist should treat as "selected". If this module is enabled and has us
+    * parked on the rocket slot right now, report the weapon slot we were on before the swap
+    * instead -- otherwise AimAssist's Slot-requirement setting sees us "on the wrong slot" every
+    * time a rocket cycle runs and stalls aiming for no reason.
+    */
    public int effectiveSlot() {
       ClientPlayerEntity player = this.getMC().player;
-      return player == null ? 0 : player.getInventory().selectedSlot;
+      if (player == null) {
+         return 0;
+      }
+
+      int selected = player.getInventory().selectedSlot;
+      if (this.isEnabled() && this.lockSlot.get() && this.rocketSlotIndex >= 0 && selected == this.rocketSlotIndex
+         && this.rememberedWeapon >= 0 && this.rememberedWeapon != this.rocketSlotIndex) {
+         return this.rememberedWeapon;
+      }
+
+      return selected;
    }
 
    @Override
