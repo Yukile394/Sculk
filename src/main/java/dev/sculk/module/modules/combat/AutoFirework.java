@@ -173,12 +173,12 @@ public final class AutoFirework extends Module {
             this.rocketSlotIndex = this.findRocketSlot();
             boolean grounded = player.isOnGround();
 
-            // kanat acma edge'i: fallFlying false -> true gectigi tam tick'te timer'i sifirla,
-            // ready() bir sonraki rocketTick cagrisinda hemen true donsun -> 1-2sn gecikme gider
+            // kanat acma edge'i: fallFlying false -> true gectigi tam tick'te timer'in
+            // delayMs'i zaten dolmus gibi sayilmasini zorla -> ready() bir sonraki rocketTick
+            // cagrisinda hemen true doner, 1-2sn'lik interval-faz gecikmesi gider
             boolean gliding = player.isFallFlying();
             if (gliding && !this.wasGliding) {
-               this.timer.reset();
-               this.timer.setLastMs(this.timer.getLastMs() - (long) this.delay.getInt()); // delay'i dolmus say
+               this.timer.forceElapsed((long) this.delay.getInt());
             }
             this.wasGliding = gliding;
 
