@@ -1,3 +1,7 @@
+// Java 17+, Fabric/Yarn mappings, Minecraft 1.20.x client
+// file: dev/sculk/module/modules/combat/Fps12.java
+// target: Sculk client trigger-bot module, item-aware cooldown-accurate auto attack
+
 package dev.sculk.module.modules.combat;
 
 import dev.sculk.module.Category;
@@ -16,6 +20,7 @@ import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.PotionItem;
 import net.minecraft.item.SwordItem;
+import net.minecraft.item.TridentItem;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.hit.EntityHitResult;
@@ -23,31 +28,42 @@ import org.lwjgl.glfw.GLFW;
 
 public final class Fps12 extends Module {
    private static final double REACH = 2.85;
-   // Hard CPS cap: 100ms = max 10 CPS (legit oyuncu 1-4 CPS, guvenli tavan)
-   private static final long MIN_ATTACK_GAP_MS = 100L;
+   // item cooldown'u bypass etmeyen tek sacma degil: bu sadece "ayni frame'de 2 kere ates etme" guard'i
+   private static final long MIN_FRAME_GAP_MS = 10L;
 
    private final BooleanSetting swordOnly = new BooleanSetting("Sword Only", false)
-      .describe("Sadece kilic/balta/iksir tutarken calis");
-   private final BooleanSetting waitCritical = new BooleanSetting("Wait Critical", false).describe("Duserken vur (critical)");
+      .describe("Sadece kilic/balta/trident/iksir tutarken calis");
+   private final BooleanSetting waitCritical = new BooleanSetting("Critical", false)
+      .describe("Havadayken (dusme fazinda) vur, yerdeyken bekle - crit hasari");
    private final BooleanSetting onLeftClick = new BooleanSetting("On Left Click", false).describe("Sadece LMB basiliyken calis");
    private final NumberSetting slot = new NumberSetting("Slot", 0.0, 0.0, 9.0, 1.0).describe("0=hepsi, 1-9=o slot");
    private final BooleanSetting lagGuard = new BooleanSetting("Lag Guard", true)
       .describe("Sunucu takildiginda vurusu bekle");
+   private final NumberSetting cooldownThreshold = new NumberSetting("CD Threshold", 1.0, 0.85, 1.0, 0.01)
+      .describe("Vurus icin gereken minimum cooldown progress (1.0 = tam sifirlanmis, legit)");
+   private final BooleanSetting blockBreak = new BooleanSetting("Ignore Blocking", true)
+      .describe("Hedef shield/blok tutuyorsa yine de vur (swing waste engellenmez ama legit davranis)");
 
-   private long lastAttackMs = 0L;
+   private long lastFrameMs = 0L;
    private long lastFallbackMs = 0L;
    private long firedTick = Long.MIN_VALUE;
+   // item cooldown resetlendi mi kontrolu icin: ayni "cooldown cycle" icinde 2. ates engellenir
+   private boolean firedThisCycle = false;
+   private float lastObservedProgress = 1.0F;
 
    public Fps12() {
-      super("Trigger Bot", "Nisandaki hedefe otomatik vurus", Category.COMBAT);
-      this.addSettings(new Setting[]{this.swordOnly, this.waitCritical, this.onLeftClick, this.slot, this.lagGuard});
+      super("Trigger Bot", "Nisandaki hedefe item cooldown'una senkron otomatik vurus", Category.COMBAT);
+      this.addSettings(new Setting[]{this.swordOnly, this.waitCritical, this.onLeftClick, this.slot,
+         this.lagGuard, this.cooldownThreshold, this.blockBreak});
    }
 
    @Override
    public void onEnable() {
-      this.lastAttackMs = 0L;
+      this.lastFrameMs = 0L;
       this.lastFallbackMs = 0L;
       this.firedTick = Long.MIN_VALUE;
+      this.firedThisCycle = false;
+      this.lastObservedProgress = 1.0F;
    }
 
    @Override
@@ -57,7 +73,7 @@ public final class Fps12 extends Module {
 
       ItemStack held = this.mc.player.getMainHandStack();
       Item heldItem = held.getItem();
-      boolean holdingSword = heldItem instanceof SwordItem || heldItem instanceof AxeItem;
+      boolean holdingSword = heldItem instanceof SwordItem || heldItem instanceof AxeItem || heldItem instanceof TridentItem;
       boolean holdingPotion = heldItem instanceof PotionItem;
       if (this.swordOnly.get() && !holdingSword && !holdingPotion) return;
 
@@ -66,37 +82,49 @@ public final class Fps12 extends Module {
 
       if (this.onLeftClick.get() && GLFW.glfwGetMouseButton(this.mc.getWindow().getHandle(), 0) != 1) return;
 
-      // ===== GATE 1: Esyanin gercek cooldown'u =====
-      // Sword: ~1.6 CPS, Axe: ~1.0-1.25 CPS, Fist: ~4 CPS
-      // Bu gate tek basina 100 CPS'i imkansiz kilar
-      if (this.mc.player.getAttackCooldownProgress(0.0F) < 0.98F) return;
-
-      // ===== GATE 2: Hard CPS cap (bug defensive) =====
+      // ===== GATE 1: ayni frame'de cift tetiklenmeyi engelle (spam fix'in koku burada) =====
       long now = System.currentTimeMillis();
-      if (now - this.lastAttackMs < MIN_ATTACK_GAP_MS) return;
+      if (now - this.lastFrameMs < MIN_FRAME_GAP_MS) return;
 
-      // ===== GATE 3: Wait Critical (yukselirken vurma) =====
+      // ===== GATE 2: item'in gercek cooldown progress'i, edge-trigger =====
+      // onBufferUpdate her frame cagrilir; progress 0.98+ oldugu surece eski kod HER FRAME ates ediyordu.
+      // duzeltme: progress'in 1.0'dan dusup tekrar threshold'a CIKTIGI ani yakala (rising edge),
+      // sonra bir sonraki swing (progress tekrar dusene kadar) kilitli kal.
+      float progress = this.mc.player.getAttackCooldownProgress(0.0F);
+      boolean cycleReset = progress < this.lastObservedProgress - 0.01F; // progress dustu = yeni swing basladi
+      if (cycleReset) this.firedThisCycle = false;
+      this.lastObservedProgress = progress;
+
+      if (progress < this.cooldownThreshold.getFloat()) return;
+      if (this.firedThisCycle) return; // bu cycle'da zaten vurduk, tekrar vurma -> spam'in asil sebebi buydu
+
+      // ===== GATE 3: Critical (sadece dusme fazinda vur) =====
       if (this.waitCritical.get() && holdingSword && !this.mc.player.isFallFlying()) {
-         if (!this.mc.player.isOnGround() && this.mc.player.getVelocity().y >= 0.0) return;
+         if (!(!this.mc.player.isOnGround() && this.mc.player.getVelocity().y < 0.0)) return;
       }
 
       // ===== GATE 4: Hedef bul =====
       Entity target = this.findTarget();
       if (target == null) return;
+      if (!this.blockBreak.get() && this.isBlocking(target)) return;
 
       // ===== GATE 5: Server tick senkronizasyonu =====
       if (this.lagGuard.get() && !this.holdForServer()) return;
 
       // ===== ATES =====
-      this.lastAttackMs = now;
+      this.lastFrameMs = now;
+      this.firedThisCycle = true;
       CombatUtils.hitEntity(target, true);
+   }
+
+   private boolean isBlocking(Entity e) {
+      return e instanceof LivingEntity le && le.isBlocking();
    }
 
    private boolean holdForServer() {
       if (ServerClock.jammed()) return false;
       long serverTick = ServerClock.tick();
       if (serverTick == Long.MIN_VALUE) {
-         // ServerClock yoksa frame-time fallback (max 20/s)
          long now = System.currentTimeMillis();
          if (now - this.lastFallbackMs < 50L) return false;
          this.lastFallbackMs = now;
