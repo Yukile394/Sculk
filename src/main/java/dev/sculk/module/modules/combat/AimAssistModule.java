@@ -79,6 +79,7 @@ public abstract class AimAssistModule extends Module {
          float lockSpeedVal = this.lockSpeed.getFloat();
          Entity newTarget = null;
          Vec2f bestDelta = null;
+         float bestAngDist = Float.MAX_VALUE;
          Entity stickyTarget = this.stickyTarget();
 
          for (Entity e : this.mc.world.getEntities()) {
@@ -91,9 +92,12 @@ public abstract class AimAssistModule extends Module {
                && this.entityAllowed(e)
                && !(eyePos.squaredDistanceTo(point = this.aimPoint(e)) > reachSq)) {
                Vec2f delta = this.rotationTo(playerRot, eyePos, point);
-               if (!(Math.abs(delta.y) > maxAngle) && (!lineOfSight || !this.raycastBlocked(eyePos, point))) {
+               // crosshair'e toplam acisal mesafe (pitch+yaw), sadece yaw degil
+               // -> gercekten baktigin kisi secilsin, FOV kenarinda yaw'i yakin biri degil
+               float angDist = MathHelper.sqrt(delta.x * delta.x + delta.y * delta.y);
+               if (!(angDist > maxAngle) && (!lineOfSight || !this.raycastBlocked(eyePos, point))) {
                   if (e == this.target || e == stickyTarget) { newTarget = e; bestDelta = delta; break; }
-                  if (bestDelta == null || Math.abs(delta.y) < Math.abs(bestDelta.y)) { newTarget = e; bestDelta = delta; }
+                  if (bestDelta == null || angDist < bestAngDist) { newTarget = e; bestDelta = delta; bestAngDist = angDist; }
                }
             }
          }
@@ -223,26 +227,32 @@ public abstract class AimAssistModule extends Module {
    protected Vec3d aimPoint(Entity e) { return this.aimPointAt(e, this.aimPart.getValue()); }
 
    protected Vec3d aimPointAt(Entity e, AimAssistModule.AimPart part) {
-      Box box = e.getBoundingBox();
-      if (part == AimAssistModule.AimPart.Auto) {
-         if (box == null) return e.getPos();
-         if (e instanceof PlayerEntity p && this.needsStatic(p)) {
-            Vec3d pos = p.getPos();
-            return new Vec3d(pos.x, pos.y + 0.9, pos.z);
-         }
-         return box.getCenter();
-      } else if (box == null) {
-         return e.getPos();
-      } else {
-         double height = box.maxY - box.minY;
+      if (e instanceof PlayerEntity p && this.needsStatic(p)) {
+         // elytra/swim/sleep/spin-attack: gercek bounding box basik/yamuk,
+         // normal ayakta boyu kullanarak dogru parcaya kitlen (hitbox disina kaymayi engeller)
+         Vec3d pos = p.getPos();
+         double standingHeight = 1.8;
          double y = switch (part) {
-            case Head -> box.maxY - height * 0.1;
-            default -> box.minY + height * 0.5;
-            case Legs -> box.minY + height * 0.25;
-            case Feet -> box.minY + height * 0.05;
+            case Head -> pos.y + standingHeight * 0.9;
+            case Auto -> pos.y + 0.9;
+            case Legs -> pos.y + standingHeight * 0.25;
+            case Feet -> pos.y + standingHeight * 0.05;
+            default -> pos.y + standingHeight * 0.5;
          };
-         return new Vec3d((box.minX + box.maxX) / 2.0, y, (box.minZ + box.maxZ) / 2.0);
+         return new Vec3d(pos.x, y, pos.z);
       }
+
+      Box box = e.getBoundingBox();
+      if (box == null) return e.getPos();
+      if (part == AimAssistModule.AimPart.Auto) return box.getCenter();
+      double height = box.maxY - box.minY;
+      double y = switch (part) {
+         case Head -> box.maxY - height * 0.1;
+         default -> box.minY + height * 0.5;
+         case Legs -> box.minY + height * 0.25;
+         case Feet -> box.minY + height * 0.05;
+      };
+      return new Vec3d((box.minX + box.maxX) / 2.0, y, (box.minZ + box.maxZ) / 2.0);
    }
 
    private boolean needsStatic(PlayerEntity p) {
@@ -300,4 +310,4 @@ public abstract class AimAssistModule extends Module {
    }
 
    public static enum AimPart { Auto, Head, Body, Legs, Feet; }
-}
+         }
