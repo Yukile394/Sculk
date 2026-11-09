@@ -4,6 +4,7 @@ import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.modules.combat.AimAssistModule;
 import dev.sculk.module.modules.combat.AutoFirework;
+import dev.sculk.module.modules.combat.KillAura;
 import dev.sculk.module.setting.BooleanSetting;
 import dev.sculk.module.setting.ModeSetting;
 import dev.sculk.module.setting.NumberSetting;
@@ -48,6 +49,11 @@ public final class TargetEsp extends Module {
          if (module instanceof AimAssistModule assist && module.isEnabled() && assist.currentTarget() != null) {
             return assist.currentTarget();
          }
+      }
+
+      KillAura aura = SculkClient.get(KillAura.class);
+      if (aura != null && aura.isEnabled() && aura.getTarget() != null) {
+         return aura.getTarget();
       }
 
       AutoFirework firework = SculkClient.get(AutoFirework.class);
