@@ -12,7 +12,7 @@ import dev.sculk.module.modules.combat.Fps13;
 import dev.sculk.module.modules.combat.Fps14;
 import dev.sculk.module.modules.combat.Fps31;
 import dev.sculk.module.modules.combat.Fps32;
-import dev.sculk.module.modules.combat.KillAura;
+import dev.sculk.module.modules.combat.AttackAura;
 import dev.sculk.module.modules.misc.Nuker;
 import dev.sculk.module.modules.render.TargetEsp;
 import dev.sculk.render.Toasts;
@@ -191,7 +191,7 @@ public final class ModuleManager {
       MODULAR.add(new AutoFirework());
       MODULAR.add(new Fps31());
       MODULAR.add(new Fps32());
-      MODULAR.add(new KillAura());
+      MODULAR.add(new AttackAura());
       MODULAR.add(new Nuker());
       MODULAR.add(new Criticals());
       MODULAR.add(new TargetEsp());
