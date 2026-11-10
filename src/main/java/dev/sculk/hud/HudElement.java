@@ -7,7 +7,11 @@ public enum HudElement {
    CPS("CPS", 0.01F, 0.155F),
    PING("Ping", 0.01F, 0.2F),
    CLOCK("Clock", 0.01F, 0.245F),
-   MODULE_LIST("Module List", 0.72F, 0.02F);
+   MODULE_LIST("Module List", 0.72F, 0.02F),
+   TARGET_INFO("Target Info", 0.42F, 0.62F),
+   POTIONS("Potions", 0.01F, 0.3F),
+   ARMOR("Armor", 0.42F, 0.86F),
+   HOTKEYS("Hotkeys", 0.01F, 0.5F);
 
    private final String label;
    private final float defaultX;

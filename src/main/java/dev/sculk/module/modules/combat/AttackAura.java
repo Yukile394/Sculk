@@ -11,67 +11,71 @@ import dev.sculk.util.Friends;
 import dev.sculk.util.Rotation;
 import dev.sculk.util.RotationUtils;
 import java.util.Comparator;
+import java.util.Optional;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.EquipmentSlot;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.decoration.ArmorStandEntity;
-import net.minecraft.entity.mob.Monster;
+import net.minecraft.entity.effect.StatusEffects;
 import net.minecraft.entity.passive.VillagerEntity;
+import net.minecraft.entity.passive.WanderingTraderEntity;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.AxeItem;
+import net.minecraft.item.Items;
 import net.minecraft.util.hit.HitResult;
 import net.minecraft.util.math.Box;
 import net.minecraft.util.math.MathHelper;
 import net.minecraft.util.math.Vec3d;
 import net.minecraft.world.RaycastContext;
 
-/** Attack Aura: picks the best target in range, turns toward it and attacks on cooldown. */
+/** AttackAura, ported from Nursultan: target filters, sorting, critical logic, sprint handling, shield break and auto mace. */
 public final class AttackAura extends Module {
-   public enum Sort { Distance, Smart, FOV, Health }
-   public enum Crits { Off, Falling }
-
-   private final NumberSetting range = new NumberSetting("Range", 3.0, 2.0, 6.0, 0.1);
-   private final NumberSetting aimRange = new NumberSetting("Aim Range", 1.0, 0.0, 6.0, 0.1)
-      .describe("Extra distance beyond Range where the aura already turns toward the target");
-   private final NumberSetting fov = new NumberSetting("FOV", 180.0, 1.0, 180.0, 1.0)
-      .describe("180 = any direction");
-   private final ModeSetting<Sort> sort = new ModeSetting<>("Sort", Sort.Distance);
+   // targets
    private final BooleanSetting players = new BooleanSetting("Players", true);
    private final BooleanSetting mobs = new BooleanSetting("Mobs", true);
-   private final BooleanSetting villagers = new BooleanSetting("Villagers", false);
-   private final BooleanSetting invisible = new BooleanSetting("Invisible", true);
-   private final BooleanSetting naked = new BooleanSetting("Naked", true).describe("Players wearing no armor");
-   private final BooleanSetting walls = new BooleanSetting("Through Walls", false);
-   private final ModeSetting<Crits> crits = new ModeSetting<>("Criticals", Crits.Off)
-      .describe("Falling = hit only while falling for critical damage");
-   private final BooleanSetting cooldown = new BooleanSetting("Cooldown Sync", true)
-      .describe("Wait for the weapon cooldown before attacking");
-   private final BooleanSetting pauseUsing = new BooleanSetting("Pause While Using", true)
-      .describe("No attacks while eating, drinking or blocking");
-   private final BooleanSetting shieldBreak = new BooleanSetting("Shield Break", true)
-      .describe("Switch to an axe for a moment when the target is blocking");
-   private final BooleanSetting rotate = new BooleanSetting("Rotate", true);
-   private final NumberSetting speed = new NumberSetting("Rotation Speed", 40.0, 1.0, 180.0, 1.0)
-      .describe("Max degrees per tick toward the target")
-      .visibleWhen(this.rotate::get);
-   private final BooleanSetting swing = new BooleanSetting("Swing", true);
-   private LivingEntity target;
+   private final BooleanSetting villagers = new BooleanSetting("Villagers", true);
+   // target-condition (players only)
+   private final BooleanSetting invisible = new BooleanSetting("Invisible", true).describe("Also attack invisible players").visibleWhen(() -> this.players.get());
+   private final BooleanSetting naked = new BooleanSetting("Naked", true).describe("Also attack players without armor").visibleWhen(() -> this.players.get());
+   private final BooleanSetting bot = new BooleanSetting("Bot", false).describe("Also attack bots (players missing from the tab list)").visibleWhen(() -> this.players.get());
+   // main
+   private final ModeSetting<AttackAura.Rotate> rotate = new ModeSetting<>("Rotation", AttackAura.Rotate.Smooth);
+   private final NumberSetting speed = new NumberSetting("Speed", 6.0, 1.0, 10.0, 0.1).describe("Rotation speed")
+      .visibleWhen(() -> this.rotate.getValue() == AttackAura.Rotate.Smooth);
+   private final ModeSetting<AttackAura.Sort> sort = new ModeSetting<>("Sort", AttackAura.Sort.Distance);
+   private final ModeSetting<AttackAura.Crit> crit = new ModeSetting<>("Critical Hit", AttackAura.Crit.Disabled)
+      .describe("Always = hit only while falling, Only Space = only while holding jump");
+   private final ModeSetting<AttackAura.SprintMode> sprint = new ModeSetting<>("Sprint Mode", AttackAura.SprintMode.Default)
+      .describe("Sprint is stopped for the hit so criticals can land; Fast resumes it right after");
+   private final NumberSetting fov = new NumberSetting("FOV", 180.0, 1.0, 180.0, 1.0);
+   private final NumberSetting additionalRange = new NumberSetting("Additional Range", 0.0, 0.0, 3.0, 0.1);
+   private final NumberSetting aimRange = new NumberSetting("Aim Range", 1.0, 0.0, 10.0, 0.1).describe("Extra range where the target is tracked and aimed at");
+   private final BooleanSetting throughWalls = new BooleanSetting("Through Walls", false);
+   private final BooleanSetting shieldBreak = new BooleanSetting("Shield Break", true).describe("Hits a raised shield with an axe from your hotbar");
+   private final BooleanSetting autoMace = new BooleanSetting("Auto Mace", true).describe("Swaps to a mace from your hotbar when falling");
+   private final NumberSetting cooldown = new NumberSetting("Cooldown", 0.92, 0.5, 1.0, 0.01).describe("Weapon charge needed before a hit");
+   // do-not-attack
+   private final BooleanSetting noEating = new BooleanSetting("Pause Eating", true).describe("Do not attack while eating or drinking");
+   private final BooleanSetting noUsing = new BooleanSetting("Pause Using Item", false).describe("Do not attack while using any item");
+   private final BooleanSetting noGliding = new BooleanSetting("Pause Gliding", false).describe("Do not attack while flying with an elytra");
+   private Entity target;
+   private boolean resumeSprint;
 
    public AttackAura() {
-      super("Attack Aura", "Automatically attacks the best target around you", Category.COMBAT);
-      this.addSettings(new Setting[]{this.range, this.aimRange, this.fov, this.sort, this.players, this.mobs,
-         this.villagers, this.invisible, this.naked, this.walls, this.crits, this.cooldown, this.pauseUsing,
-         this.shieldBreak, this.rotate, this.speed, this.swing});
+      super("AttackAura", "Automatically targets and attacks entities", Category.COMBAT);
+      this.addSettings(new Setting[]{this.players, this.mobs, this.villagers, this.invisible, this.naked, this.bot, this.rotate, this.speed,
+         this.sort, this.crit, this.sprint, this.fov, this.additionalRange, this.aimRange, this.throughWalls, this.shieldBreak,
+         this.autoMace, this.cooldown, this.noEating, this.noUsing, this.noGliding});
    }
 
-   /** Current target, used by Target ESP. */
-   public LivingEntity getTarget() {
+   public Entity currentTarget() {
       return this.target;
    }
 
    @Override
    public void onEnable() {
       this.target = null;
+      this.resumeSprint = false;
    }
 
    @Override
@@ -79,170 +83,316 @@ public final class AttackAura extends Module {
       this.target = null;
    }
 
+   // ------------------------------------------------------------------ ranges
+
+   private double attackRange() {
+      return this.mc.player.getEntityInteractionRange() + this.additionalRange.getValue();
+   }
+
+   private double trackRange() {
+      return this.attackRange() + this.aimRange.getValue();
+   }
+
+   // -------------------------------------------------------------------- tick
+
    @Override
    public void onTick() {
-      var mc = this.getMC();
-      if (mc.player == null || mc.world == null || mc.interactionManager == null || mc.currentScreen != null) {
+      if (this.mc == null || this.mc.player == null || this.mc.world == null || this.mc.interactionManager == null) {
          this.target = null;
          return;
       }
 
-      if (this.target == null || !this.valid(this.target, this.range.getValue() + this.aimRange.getValue())) {
-         this.target = this.findTarget();
+      if (this.resumeSprint) {
+         this.resumeSprint = false;
+         if (this.mc.options.forwardKey.isPressed() && !this.mc.player.isSneaking()) {
+            this.mc.player.setSprinting(true);
+         }
       }
+
+      if (this.mc.currentScreen != null || this.mc.player.isSpectator() || !this.mc.player.isAlive()) {
+         this.target = null;
+         return;
+      }
+
+      if (this.target == null || !this.valid(this.target, this.mc.player.getEyePos())) {
+         this.target = this.pickTarget();
+      }
+
       if (this.target == null) {
          return;
       }
 
-      Vec3d eye = mc.player.getEyePos();
-      Vec3d aim = closestPoint(this.target.getBoundingBox(), eye);
-      if (this.rotate.get()) {
-         this.turnToward(aim);
+      Vec3d eye = this.mc.player.getEyePos();
+      if (this.rotate.getValue() != AttackAura.Rotate.None) {
+         this.turn(this.aimPoint(this.target, eye));
       }
 
-      if (eye.squaredDistanceTo(aim) > this.range.getValue() * this.range.getValue()) {
-         return;
-      }
-      if (this.pauseUsing.get() && mc.player.isUsingItem()) {
-         return;
-      }
-      if (this.cooldown.get() && mc.player.getAttackCooldownProgress(0.5F) < 0.92F) {
-         return;
-      }
-      if (!this.critReady()) {
-         return;
-      }
-
-      this.attack(this.target);
+      CombatUtils.noteInteracted(this.target);
+      this.attack(eye);
    }
 
-   private void attack(LivingEntity victim) {
-      var inv = this.getMC().player.getInventory();
-      int previous = inv.selectedSlot;
-      int axe = -1;
-      if (this.shieldBreak.get() && victim instanceof PlayerEntity p && p.isBlocking() && !CombatUtils.isShieldFacingAway(p)) {
-         for (int i = 0; i < 9; i++) {
-            if (inv.getStack(i).getItem() instanceof AxeItem) {
-               axe = i;
-               break;
+   // ------------------------------------------------------------------ attack
+
+   private boolean paused() {
+      if (this.noGliding.get() && this.mc.player.isFallFlying()) {
+         return true;
+      }
+
+      if (this.mc.player.isUsingItem()) {
+         if (this.noUsing.get()) {
+            return true;
+         }
+
+         if (this.noEating.get()) {
+            switch (this.mc.player.getActiveItem().getUseAction()) {
+               case EAT, DRINK -> {
+                  return true;
+               }
+               default -> {
+               }
             }
          }
       }
 
-      if (axe != -1) {
-         inv.selectedSlot = axe;
-      }
-      CombatUtils.hitEntity(victim, this.swing.get());
-      CombatUtils.noteInteracted(victim);
-      if (axe != -1) {
-         inv.selectedSlot = previous;
-      }
+      return false;
    }
 
    private boolean critReady() {
-      if (this.crits.getValue() == Crits.Off) {
-         return true;
-      }
-      var p = this.getMC().player;
-      if (p.isClimbing() || p.isTouchingWater() || p.hasVehicle() || p.isFallFlying()) {
-         return true;
-      }
-      return !p.isOnGround() && p.fallDistance > 0.0F;
+      PlayerEntity p = this.mc.player;
+      boolean airborne = !p.isOnGround() && !p.isClimbing() && !p.isTouchingWater() && !p.hasVehicle() && !p.isFallFlying()
+         && !p.hasStatusEffect(StatusEffects.BLINDNESS) && !p.hasStatusEffect(StatusEffects.LEVITATION) && !p.getAbilities().flying;
+      return airborne && p.fallDistance > 0.0F && p.getVelocity().y < 0.0;
    }
 
-   private LivingEntity findTarget() {
-      var mc = this.getMC();
-      double reach = this.range.getValue() + this.aimRange.getValue();
-      Box area = mc.player.getBoundingBox().expand(reach + 2.0);
-      Comparator<LivingEntity> order = Comparator.<LivingEntity>comparingInt(e -> e instanceof PlayerEntity ? 0 : 1)
-         .thenComparingDouble(this::score);
-
-      LivingEntity best = null;
-      for (Entity e : mc.world.getOtherEntities(mc.player, area)) {
-         if (e instanceof LivingEntity living && this.valid(living, reach)) {
-            if (best == null || order.compare(living, best) < 0) {
-               best = living;
-            }
-         }
-      }
-      return best;
-   }
-
-   private double score(LivingEntity e) {
-      var p = this.getMC().player;
-      double dist = p.getEyePos().squaredDistanceTo(closestPoint(e.getBoundingBox(), p.getEyePos()));
-      return switch (this.sort.getValue()) {
-         case Distance -> dist;
-         case Health -> e.getHealth() + e.getAbsorptionAmount();
-         case FOV -> RotationUtils.angleTo(RotationUtils.direction(p, e.getBoundingBox().getCenter()));
-         case Smart -> (e.getHealth() + e.getAbsorptionAmount()) * 2.0 + Math.sqrt(dist) * 3.0;
+   private boolean critGate() {
+      return switch (this.crit.getValue()) {
+         case Disabled -> true;
+         case Always -> this.critReady();
+         case OnlySpace -> !this.mc.options.jumpKey.isPressed() || this.critReady();
       };
    }
 
-   private boolean valid(LivingEntity e, double reach) {
-      var mc = this.getMC();
-      if (e == mc.player || !e.isAlive() || e.isRemoved() || e.isSpectator() || e instanceof ArmorStandEntity) {
-         return false;
-      }
-      if (Friends.isAlly(e) || !this.typeAllowed(e)) {
-         return false;
-      }
-      if (!this.invisible.get() && e.isInvisible()) {
-         return false;
-      }
-      if (!this.naked.get() && e instanceof PlayerEntity && !this.hasArmor(e)) {
-         return false;
+   private void attack(Vec3d eye) {
+      Entity entity = this.target;
+      if (entity == null || this.paused()) {
+         return;
       }
 
-      Vec3d eye = mc.player.getEyePos();
-      Vec3d point = closestPoint(e.getBoundingBox(), eye);
-      if (eye.squaredDistanceTo(point) > reach * reach) {
-         return false;
+      if (this.distance(entity, eye) > this.attackRange()) {
+         return;
       }
-      if (this.fov.getValue() < 180.0 && RotationUtils.angleTo(RotationUtils.direction(mc.player, point)) > this.fov.getValue()) {
-         return false;
+
+      if (this.mc.player.getAttackCooldownProgress(0.5F) < this.cooldown.getFloat()) {
+         return;
       }
-      return this.walls.get() || this.visible(eye, point);
+
+      if (!this.critGate()) {
+         return;
+      }
+
+      if (this.rotate.getValue() != AttackAura.Rotate.None && !this.facing(entity, eye)) {
+         return;
+      }
+
+      if (!this.throughWalls.get() && this.blocked(entity, eye)) {
+         return;
+      }
+
+      int previous = this.mc.player.getInventory().selectedSlot;
+      int slot = this.weaponSlot(entity);
+      boolean swapped = slot >= 0 && slot != previous;
+      if (swapped) {
+         this.mc.player.getInventory().selectedSlot = slot;
+      }
+
+      if (this.crit.getValue() != AttackAura.Crit.Disabled && this.mc.player.isSprinting()) {
+         this.mc.player.setSprinting(false);
+         this.resumeSprint = this.sprint.getValue() == AttackAura.SprintMode.Fast;
+      }
+
+      CombatUtils.hitEntity(entity, true);
+      if (swapped) {
+         this.mc.player.getInventory().selectedSlot = previous;
+      }
    }
 
-   private boolean typeAllowed(LivingEntity e) {
-      if (e instanceof PlayerEntity) {
-         return this.players.get();
+   /** Hotbar slot to hit with (axe for shields, mace while falling), or -1 to keep the current item. */
+   private int weaponSlot(Entity entity) {
+      if (this.shieldBreak.get() && entity instanceof LivingEntity living && living.isBlocking()
+         && !(this.mc.player.getMainHandStack().getItem() instanceof AxeItem)) {
+         for (int i = 0; i < 9; i++) {
+            if (this.mc.player.getInventory().getStack(i).getItem() instanceof AxeItem) {
+               return i;
+            }
+         }
       }
-      if (e instanceof VillagerEntity) {
+
+      if (this.autoMace.get() && this.mc.player.fallDistance >= 1.5F && !this.mc.player.getMainHandStack().isOf(Items.MACE)) {
+         for (int i = 0; i < 9; i++) {
+            if (this.mc.player.getInventory().getStack(i).isOf(Items.MACE)) {
+               return i;
+            }
+         }
+      }
+
+      return -1;
+   }
+
+   // ---------------------------------------------------------------- rotation
+
+   private void turn(Vec3d point) {
+      Rotation wanted = RotationUtils.direction(this.mc.player, point);
+      float yawDiff = MathHelper.wrapDegrees((float)wanted.yaw() - this.mc.player.getYaw());
+      float pitchDiff = (float)wanted.pitch() - this.mc.player.getPitch();
+      float yawStep = yawDiff;
+      float pitchStep = pitchDiff;
+      if (this.rotate.getValue() == AttackAura.Rotate.Smooth) {
+         float factor = MathHelper.clamp(this.speed.getFloat() / 10.0F, 0.05F, 1.0F);
+         float maxStep = 10.0F + this.speed.getFloat() * 12.0F;
+         yawStep = MathHelper.clamp(yawDiff * factor, -maxStep, maxStep);
+         pitchStep = MathHelper.clamp(pitchDiff * factor, -maxStep, maxStep);
+      }
+
+      this.mc.player.setYaw(this.mc.player.getYaw() + yawStep);
+      this.mc.player.setPitch(MathHelper.clamp(this.mc.player.getPitch() + pitchStep, -90.0F, 90.0F));
+   }
+
+   private boolean facing(Entity entity, Vec3d eye) {
+      Vec3d look = this.mc.player.getRotationVec(1.0F);
+      double reach = this.attackRange() + 0.5;
+      Box box = entity.getBoundingBox().expand(0.1);
+      if (box.contains(eye)) {
+         return true;
+      }
+
+      Optional<Vec3d> hit = box.raycast(eye, eye.add(look.x * reach, look.y * reach, look.z * reach));
+      return hit.isPresent();
+   }
+
+   // --------------------------------------------------------------- targeting
+
+   private Entity pickTarget() {
+      Vec3d eye = this.mc.player.getEyePos();
+      double range = this.trackRange();
+      Box area = this.mc.player.getBoundingBox().expand(range + 2.0);
+      Comparator<Entity> order = Comparator.<Entity>comparingInt(e -> this.blocked(e, eye) ? 1 : 0)
+         .thenComparingInt(e -> e instanceof PlayerEntity ? 0 : 1)
+         .thenComparingDouble(e -> this.score(e, eye));
+      return this.mc.world.getOtherEntities(this.mc.player, area, e -> this.valid(e, eye)).stream().min(order).orElse(null);
+   }
+
+   private double score(Entity entity, Vec3d eye) {
+      LivingEntity living = (LivingEntity)entity;
+      return switch (this.sort.getValue()) {
+         case Distance -> this.distance(entity, eye);
+         case Health -> living.getHealth() + living.getAbsorptionAmount();
+         case FOV -> Math.abs(this.yawTo(entity, eye));
+         case Smart -> this.distance(entity, eye) * 2.0 + (living.getHealth() + living.getAbsorptionAmount()) * 0.4 + Math.abs(this.yawTo(entity, eye)) * 0.02;
+      };
+   }
+
+   private boolean valid(Entity entity, Vec3d eye) {
+      if (entity == this.mc.player || !(entity instanceof LivingEntity living) || entity instanceof ArmorStandEntity) {
+         return false;
+      }
+
+      if (!living.isAlive() || living.isRemoved() || living.getHealth() <= 0.0F || entity.isSpectator() || Friends.isAlly(entity)) {
+         return false;
+      }
+
+      if (!this.typeAllowed(entity)) {
+         return false;
+      }
+
+      if (this.distance(entity, eye) > this.trackRange()) {
+         return false;
+      }
+
+      if (this.fov.getValue() < 180.0 && Math.abs(this.yawTo(entity, eye)) > this.fov.getValue()) {
+         return false;
+      }
+
+      return true;
+   }
+
+   private boolean typeAllowed(Entity entity) {
+      if (entity instanceof PlayerEntity player) {
+         if (!this.players.get()) {
+            return false;
+         }
+
+         if (!this.invisible.get() && player.isInvisible()) {
+            return false;
+         }
+
+         if (!this.naked.get() && this.isNaked(player)) {
+            return false;
+         }
+
+         return this.bot.get() || !this.isBot(player);
+      }
+
+      if (entity instanceof VillagerEntity || entity instanceof WanderingTraderEntity) {
          return this.villagers.get();
       }
-      return this.mobs.get() && e instanceof Monster;
+
+      return this.mobs.get();
    }
 
-   private boolean hasArmor(LivingEntity e) {
-      return !e.getEquippedStack(EquipmentSlot.HEAD).isEmpty()
-         || !e.getEquippedStack(EquipmentSlot.CHEST).isEmpty()
-         || !e.getEquippedStack(EquipmentSlot.LEGS).isEmpty()
-         || !e.getEquippedStack(EquipmentSlot.FEET).isEmpty();
+   private boolean isNaked(PlayerEntity player) {
+      return player.getEquippedStack(EquipmentSlot.HEAD).isEmpty() && player.getEquippedStack(EquipmentSlot.CHEST).isEmpty()
+         && player.getEquippedStack(EquipmentSlot.LEGS).isEmpty() && player.getEquippedStack(EquipmentSlot.FEET).isEmpty();
    }
 
-   private boolean visible(Vec3d from, Vec3d to) {
-      var mc = this.getMC();
-      return mc.world.raycast(new RaycastContext(from, to, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, mc.player))
-         .getType() == HitResult.Type.MISS;
+   private boolean isBot(PlayerEntity player) {
+      return this.mc.getNetworkHandler() != null && this.mc.getNetworkHandler().getPlayerListEntry(player.getUuid()) == null;
    }
 
-   private static Vec3d closestPoint(Box box, Vec3d from) {
-      return new Vec3d(
-         MathHelper.clamp(from.x, box.minX, box.maxX),
-         MathHelper.clamp(from.y, box.minY, box.maxY),
-         MathHelper.clamp(from.z, box.minZ, box.maxZ)
-      );
+   /** True when a block sits between your eyes and the target's aim point. */
+   private boolean blocked(Entity entity, Vec3d eye) {
+      Vec3d point = this.aimPoint(entity, eye);
+      HitResult hit = this.mc.world.raycast(new RaycastContext(eye, point, RaycastContext.ShapeType.COLLIDER, RaycastContext.FluidHandling.NONE, this.mc.player));
+      return hit.getType() != HitResult.Type.MISS;
    }
 
-   private void turnToward(Vec3d aim) {
-      var p = this.getMC().player;
-      Rotation delta = RotationUtils.deltaTo(RotationUtils.direction(p, aim));
-      float max = this.speed.getFloat();
-      float dYaw = MathHelper.clamp((float)delta.yaw(), -max, max);
-      float dPitch = MathHelper.clamp((float)delta.pitch(), -max, max);
-      p.setYaw(p.getYaw() + dYaw);
-      p.setPitch(MathHelper.clamp(p.getPitch() + dPitch, -90.0F, 90.0F));
+   private double yawTo(Entity entity, Vec3d eye) {
+      Rotation wanted = RotationUtils.direction(this.mc.player, this.aimPoint(entity, eye));
+      return MathHelper.wrapDegrees((float)wanted.yaw() - this.mc.player.getYaw());
+   }
+
+   private Vec3d aimPoint(Entity entity, Vec3d eye) {
+      Box box = entity.getBoundingBox();
+      double y = MathHelper.clamp(eye.y, box.minY + 0.25, box.maxY - 0.15);
+      return new Vec3d((box.minX + box.maxX) / 2.0, y, (box.minZ + box.maxZ) / 2.0);
+   }
+
+   /** Distance from the eye to the closest point of the target's hitbox. */
+   private double distance(Entity entity, Vec3d eye) {
+      Box box = entity.getBoundingBox();
+      return eye.distanceTo(new Vec3d(MathHelper.clamp(eye.x, box.minX, box.maxX), MathHelper.clamp(eye.y, box.minY, box.maxY), MathHelper.clamp(eye.z, box.minZ, box.maxZ)));
+   }
+
+   public static enum Rotate {
+      Smooth,
+      Snap,
+      None;
+   }
+
+   public static enum Sort {
+      Distance,
+      Smart,
+      FOV,
+      Health;
+   }
+
+   public static enum Crit {
+      Disabled,
+      Always,
+      OnlySpace;
+   }
+
+   public static enum SprintMode {
+      Default,
+      Fast;
    }
 }

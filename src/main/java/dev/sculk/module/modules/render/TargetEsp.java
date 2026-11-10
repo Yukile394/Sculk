@@ -46,14 +46,13 @@ public final class TargetEsp extends Module {
 
    private Entity pick() {
       for (Module module : SculkClient.modules()) {
+         if (module instanceof AttackAura aura && module.isEnabled() && aura.currentTarget() != null) {
+            return aura.currentTarget();
+         }
+
          if (module instanceof AimAssistModule assist && module.isEnabled() && assist.currentTarget() != null) {
             return assist.currentTarget();
          }
-      }
-
-      AttackAura aura = SculkClient.get(AttackAura.class);
-      if (aura != null && aura.isEnabled() && aura.getTarget() != null) {
-         return aura.getTarget();
       }
 
       AutoFirework firework = SculkClient.get(AutoFirework.class);

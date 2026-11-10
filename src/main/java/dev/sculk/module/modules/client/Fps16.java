@@ -20,11 +20,15 @@ public final class Fps16 extends Module {
    private final BooleanSetting ping = new BooleanSetting("Ping", true);
    private final BooleanSetting clock = new BooleanSetting("Clock", true);
    private final BooleanSetting moduleList = new BooleanSetting("Module List", true);
+   private final BooleanSetting targetInfo = new BooleanSetting("Target Info", true);
+   private final BooleanSetting potions = new BooleanSetting("Potions", true);
+   private final BooleanSetting armor = new BooleanSetting("Armor", true);
+   private final BooleanSetting hotkeys = new BooleanSetting("Hotkeys", false);
    private final ButtonSetting editor = new ButtonSetting("Edit HUD", this::openEditor).instant();
 
    public Fps16() {
       super("HUD", "On-screen overlay", Category.CLIENT);
-      this.addSettings(new Setting[]{this.watermark, this.fps, this.coords, this.cps, this.ping, this.clock, this.moduleList, this.editor});
+      this.addSettings(new Setting[]{this.watermark, this.fps, this.coords, this.cps, this.ping, this.clock, this.moduleList, this.targetInfo, this.potions, this.armor, this.hotkeys, this.editor});
    }
 
    private void openEditor() {
@@ -61,6 +65,10 @@ public final class Fps16 extends Module {
          case PING -> this.ping.get();
          case CLOCK -> this.clock.get();
          case MODULE_LIST -> this.moduleList.get();
+         case TARGET_INFO -> this.targetInfo.get();
+         case POTIONS -> this.potions.get();
+         case ARMOR -> this.armor.get();
+         case HOTKEYS -> this.hotkeys.get();
       };
    }
 }

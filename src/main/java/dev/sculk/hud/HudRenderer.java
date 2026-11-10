@@ -71,10 +71,18 @@ public final class HudRenderer {
    }
 
    public static boolean active(HudElement element, boolean enabled) {
+      if (HudWidgets.isWidget(element)) {
+         return enabled && HudWidgets.hasContent(element);
+      }
+
       return element != HudElement.MODULE_LIST ? enabled : enabled && !moduleNames().isEmpty();
    }
 
    public static int width(HudElement element) {
+      if (HudWidgets.isWidget(element)) {
+         return HudWidgets.width(element);
+      }
+
       if (element != HudElement.MODULE_LIST) {
          if (element == HudElement.WATERMARK) {
             return 17 + Render2D.textWidth("SculkClient") + 3 + Render2D.textWidth("1.0.0-beta");
@@ -94,10 +102,19 @@ public final class HudRenderer {
    }
 
    public static int height(HudElement element) {
+      if (HudWidgets.isWidget(element)) {
+         return HudWidgets.height(element);
+      }
+
       return element == HudElement.MODULE_LIST ? Math.max(13, moduleNames().size() * 11 + 8) : 15;
    }
 
    public static void draw(DrawContext context, HudElement element, float x, float y) {
+      if (HudWidgets.isWidget(element)) {
+         HudWidgets.draw(context, element, x, y, animatedWidth(element), animatedHeight(element), BOXES.get(element).fade.get());
+         return;
+      }
+
       if (element == HudElement.MODULE_LIST) {
          drawModuleList(context, x, y);
       } else {
