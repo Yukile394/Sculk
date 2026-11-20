@@ -33,11 +33,17 @@ import net.minecraft.world.RaycastContext;
  * 3x3 Mode: every chosen block also takes the 3x3 layer around it (the plane facing you) in the same pass.
  */
 public final class Nuker extends Module {
-   private final NumberSetting radius = new NumberSetting("Radius", 4.0, 1.0, 6.0, 0.5).describe("Horizontal and vertical reach");
-   private final NumberSetting minHeight = new NumberSetting("Min Height", 0.0, -4.0, 4.0, 1.0).describe("Lowest layer relative to your feet");
-   private final NumberSetting maxHeight = new NumberSetting("Max Height", 2.0, -4.0, 6.0, 1.0).describe("Highest layer relative to your feet");
+   private final ModeSetting<Trigger> trigger = new ModeSetting<>("Trigger", Trigger.OnBreak)
+      .describe("OnBreak = when you break a block, the 3x3 around it follows. Radius = breaks everything around you on its own");
+   private final NumberSetting radius = new NumberSetting("Radius", 4.0, 1.0, 6.0, 0.5)
+      .describe("Horizontal and vertical reach").visibleWhen(() -> this.trigger.getValue() == Trigger.Radius);
+   private final NumberSetting minHeight = new NumberSetting("Min Height", 0.0, -4.0, 4.0, 1.0)
+      .describe("Lowest layer relative to your feet").visibleWhen(() -> this.trigger.getValue() == Trigger.Radius);
+   private final NumberSetting maxHeight = new NumberSetting("Max Height", 2.0, -4.0, 6.0, 1.0)
+      .describe("Highest layer relative to your feet").visibleWhen(() -> this.trigger.getValue() == Trigger.Radius);
    private final BooleanSetting area3x3 = new BooleanSetting("3x3 Mode", true)
-      .describe("Breaking one block also breaks the 3x3 layer around it, on the face you are looking at");
+      .describe("Radius mode: every chosen block also takes the 3x3 layer around it, on the face you are looking at")
+      .visibleWhen(() -> this.trigger.getValue() == Trigger.Radius);
    private final NumberSetting perTick = new NumberSetting("Blocks Per Tick", 1.0, 1.0, 8.0, 1.0)
       .describe("Only used in creative mode (counts 3x3 groups when 3x3 Mode is on)");
    private final BooleanSetting onlyAllowed = new BooleanSetting("Only Allowed Blocks", false).describe("Break only the blocks listed below");
@@ -57,6 +63,15 @@ public final class Nuker extends Module {
    private BlockPos current;
    private int delay;
    private int aimTicks;
+   /** OnBreak: block (and face) the player is currently mining, armed before the click is processed. */
+   private BlockPos watch;
+   private Direction watchSide;
+   private int idleTicks;
+
+   public enum Trigger {
+      OnBreak,
+      Radius
+   }
 
    /** Reach cap and pacing per preset. Values are untuned guesses, not measured against the real anticheats. */
    public enum Protection {
@@ -84,19 +99,50 @@ public final class Nuker extends Module {
    public Nuker() {
       super("Nuker", "Breaks blocks around you", Category.MISC);
       this.addSettings(
-         new Setting[]{this.radius, this.minHeight, this.maxHeight, this.area3x3, this.perTick, this.onlyAllowed, this.allowed, this.rotate, this.swing,
+         new Setting[]{this.trigger, this.radius, this.minHeight, this.maxHeight, this.area3x3, this.perTick, this.onlyAllowed, this.allowed, this.rotate, this.swing,
             this.protection, this.aimSpeed, this.extraDelay}
       );
    }
 
    @Override
    public void onDisable() {
+      this.watch = null;
       this.queue.clear();
       this.current = null;
       this.delay = 0;
       this.aimTicks = 0;
       if (this.mc != null && this.mc.interactionManager != null) {
          this.mc.interactionManager.cancelBlockBreaking();
+      }
+   }
+
+   /** True while the Nuker is mining a queued block; the client's own LMB handling must stay out of the way then. */
+   public boolean ownsBreaking() {
+      return this.isEnabled() && !this.queue.isEmpty() && this.mc != null && this.mc.currentScreen == null;
+   }
+
+   /** Runs before the client processes the click, so the block is still there when it gets armed. */
+   @Override
+   public void onBufferUpdate() {
+      if (this.trigger.getValue() != Trigger.OnBreak || this.mc == null || this.mc.world == null || this.mc.currentScreen != null) {
+         return;
+      }
+
+      if (!this.mc.options.attackKey.isPressed()) {
+         if (++this.idleTicks > 10 && this.queue.isEmpty()) {
+            this.watch = null;
+         }
+
+         return;
+      }
+
+      this.idleTicks = 0;
+      if (this.queue.isEmpty() && this.mc.crosshairTarget instanceof BlockHitResult hit && hit.getType() == HitResult.Type.BLOCK) {
+         BlockPos pos = hit.getBlockPos();
+         if (!this.mc.world.getBlockState(pos).isAir()) {
+            this.watch = pos;
+            this.watchSide = hit.getSide();
+         }
       }
    }
 
@@ -115,18 +161,69 @@ public final class Nuker extends Module {
       Scan scan = this.scan();
       boolean acted;
       boolean guarded = this.protection.getValue() != Protection.Off;
-      if (guarded) {
-         acted = this.tickProtected(scan);
-      } else if (this.mc.interactionManager.getCurrentGameMode().isCreative()) {
+      boolean creativeNow = this.mc.interactionManager.getCurrentGameMode().isCreative();
+      if (this.trigger.getValue() == Trigger.OnBreak) {
+         acted = this.tickOnBreak(scan, creativeNow);
+      } else if (guarded) {
+         acted = this.tickProtected(scan, true);
+      } else if (creativeNow) {
          this.queue.clear();
          acted = this.tickCreative(scan);
       } else {
-         acted = this.tickSurvival(scan);
+         acted = this.tickSurvival(scan, true);
       }
 
       if (acted && (guarded || this.swing.get())) {
          this.mc.player.swingHand(Hand.MAIN_HAND);
       }
+   }
+
+   /**
+    * OnBreak: waits until the block you were mining is gone, then queues the neighbours of that block in the plane
+    * you were facing (the 3x3 around it) and works them off with the normal survival / creative / protected path.
+    */
+   private boolean tickOnBreak(Scan scan, boolean creative) {
+      boolean acted = false;
+      if (this.watch != null && this.mc.world.getBlockState(this.watch).isAir()) {
+         BlockPos broken = this.watch;
+         Direction side = this.watchSide != null ? this.watchSide : this.faceToward(broken);
+         this.watch = null;
+         acted = this.startGroup(this.neighbours(broken, side.getAxis(), scan), creative);
+      }
+
+      if (this.protection.getValue() != Protection.Off) {
+         acted |= this.tickProtected(scan, false);
+      } else if (!creative) {
+         acted |= this.tickSurvival(scan, false);
+      }
+
+      return acted;
+   }
+
+   /** Hands a fresh group to the right path. Instant-break blocks go out at once, everything else is queued. */
+   private boolean startGroup(List<BlockPos> group, boolean creative) {
+      if (group.isEmpty()) {
+         return false;
+      }
+
+      if (this.protection.getValue() != Protection.Off) {
+         this.queue.addAll(group);
+         return false;
+      }
+
+      boolean acted = false;
+      for (BlockPos pos : group) {
+         BlockState state = this.mc.world.getBlockState(pos);
+         boolean instant = creative || state.calcBlockBreakingDelta(this.mc.player, this.mc.world, pos) >= 1.0F;
+         if (instant) {
+            this.mc.interactionManager.attackBlock(pos, this.faceToward(pos));
+            acted = true;
+         } else {
+            this.queue.add(pos);
+         }
+      }
+
+      return acted;
    }
 
    /** Creative: every block dies on the first attack packet, so a whole 3x3 group goes out in one tick. */
@@ -171,11 +268,16 @@ public final class Nuker extends Module {
     * and the target stays the same until it is gone (no progress resets). Blocks that break instantly with the
     * current tool are taken in the same tick, which is the only extra speed the server accepts without ghost blocks.
     */
-   private boolean tickSurvival(Scan scan) {
+   private boolean tickSurvival(Scan scan, boolean autoFill) {
       this.queue.removeIf(pos -> !this.eligible(pos, scan));
       boolean acted = false;
 
       if (this.queue.isEmpty()) {
+         if (!autoFill) {
+            this.current = null;
+            return false;
+         }
+
          List<BlockPos> targets = this.collect(scan);
          if (targets.isEmpty()) {
             this.stopMining();
@@ -228,7 +330,7 @@ public final class Nuker extends Module {
     * (GCD-snapped, speed limited) and the break starts only on a tick where the current look ray already hits the
     * block, so the server has seen the rotation before the dig packet. The swing follows every break tick.
     */
-   private boolean tickProtected(Scan scan) {
+   private boolean tickProtected(Scan scan, boolean autoFill) {
       if (this.delay > 0) {
          this.delay--;
          return false;
@@ -243,6 +345,12 @@ public final class Nuker extends Module {
             this.delay--;
             return false;
          }
+      }
+
+      if (this.queue.isEmpty() && !autoFill) {
+         this.current = null;
+         this.aimTicks = 0;
+         return false;
       }
 
       if (this.queue.isEmpty()) {
@@ -397,14 +505,19 @@ public final class Nuker extends Module {
    }
 
    private Scan scan() {
-      double reach = Math.min(this.radius.getValue(), this.mc.player.getBlockInteractionRange());
+      boolean onBreak = this.trigger.getValue() == Trigger.OnBreak;
+      double reach = this.mc.player.getBlockInteractionRange();
+      if (!onBreak) {
+         reach = Math.min(reach, this.radius.getValue());
+      }
+
       Protection mode = this.protection.getValue();
       if (mode != Protection.Off) {
          reach = Math.min(reach, mode.reach);
       }
 
-      int low = (int)Math.min(this.minHeight.getValue(), this.maxHeight.getValue());
-      int high = (int)Math.max(this.minHeight.getValue(), this.maxHeight.getValue());
+      int low = onBreak ? -100000 : (int)Math.min(this.minHeight.getValue(), this.maxHeight.getValue());
+      int high = onBreak ? 100000 : (int)Math.max(this.minHeight.getValue(), this.maxHeight.getValue());
       Set<String> whitelist = this.onlyAllowed.get() ? this.parseAllowed() : null;
       return new Scan(this.mc.player.getEyePos(), reach, this.mc.player.getBlockPos().getY(), low, high, whitelist);
    }
@@ -445,11 +558,16 @@ public final class Nuker extends Module {
    private List<BlockPos> group(BlockPos center, Scan scan) {
       List<BlockPos> out = new ArrayList<>(9);
       out.add(center);
-      if (!this.area3x3.get()) {
-         return out;
+      if (this.area3x3.get()) {
+         out.addAll(this.neighbours(center, this.faceToward(center).getAxis(), scan));
       }
 
-      Direction.Axis axis = this.faceToward(center).getAxis();
+      return out;
+   }
+
+   /** The up to 8 blocks around {@code center} in the plane perpendicular to {@code axis}, nearest first. */
+   private List<BlockPos> neighbours(BlockPos center, Direction.Axis axis, Scan scan) {
+      List<BlockPos> out = new ArrayList<>(8);
       for (int a = -1; a <= 1; a++) {
          for (int b = -1; b <= 1; b++) {
             if (a == 0 && b == 0) {
@@ -467,7 +585,7 @@ public final class Nuker extends Module {
          }
       }
 
-      out.subList(1, out.size()).sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(scan.eye())));
+      out.sort(Comparator.comparingDouble(p -> Vec3d.ofCenter(p).squaredDistanceTo(scan.eye())));
       return out;
    }
 
