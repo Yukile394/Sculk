@@ -105,6 +105,7 @@ public final class AttackAura extends Module {
 
    @Override
    public void onDisable() {
+      dev.sculk.util.RotationManager.release();
       this.target = null;
       this.resetState();
    }
