@@ -76,6 +76,11 @@ public final class RotationManager {
          return;
       }
 
+      if (active && MinecraftClient.getInstance().currentScreen != null) {
+         release();
+         return;
+      }
+
       if (!active || ticks - 1 <= lastSet) {
          return;
       }
