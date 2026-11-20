@@ -307,7 +307,7 @@ public final class AttackAura extends Module {
    private Sim simulate(int ticks) {
       PlayerEntity p = this.mc.player;
       boolean ground = p.isOnGround();
-      boolean landed = p.verticalCollisionBelow;
+      boolean landed = p.isOnGround();
       double fall = p.fallDistance;
       if (p.isTouchingWater() || p.isInLava() || p.isClimbing() || p.hasVehicle() || p.isFallFlying()) {
          return new Sim(fall, ground, landed);
@@ -350,7 +350,7 @@ public final class AttackAura extends Module {
 
    /** Nursultan class11079.N(class11915): about to jump into a hit, so the forward key is cut for a moment. */
    private boolean preCrit(Sim sim1) {
-      boolean landed = this.mc.player.verticalCollisionBelow;
+      boolean landed = this.mc.player.isOnGround();
       return landed && this.sinceHit >= this.interval() - 1 && sim1.fall() > 0.0 && this.mc.player.getAttackCooldownProgress(1.5F) > 0.9F;
    }
 
@@ -376,7 +376,7 @@ public final class AttackAura extends Module {
             this.r3 = 12;
          }
 
-         if (this.mc.player.verticalCollisionBelow) {
+         if (this.mc.player.isOnGround()) {
             return false;
          }
       }
@@ -390,7 +390,7 @@ public final class AttackAura extends Module {
          return false;
       }
 
-      if (critOn && envOk && (this.mc.player.fallDistance == 0.0F || this.mc.player.verticalCollisionBelow)) {
+      if (critOn && envOk && (this.mc.player.fallDistance == 0.0F || this.mc.player.isOnGround())) {
          return false;
       }
 
