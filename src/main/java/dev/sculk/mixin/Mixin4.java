@@ -2,6 +2,7 @@ package dev.sculk.mixin;
 
 import dev.sculk.SculkClient;
 import dev.sculk.module.ModuleManager;
+import dev.sculk.module.modules.misc.Nuker;
 import net.minecraft.client.MinecraftClient;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -26,5 +27,17 @@ public abstract class Mixin4 {
    private void sculk$onRenderTick(boolean tick, CallbackInfo ci) {
       SculkClient.get();
       ModuleManager.renderTick(MinecraftClient.getInstance().getRenderTickCounter().getTickDelta(true));
+   }
+
+   @Inject(
+      method = {"Lnet/minecraft/client/MinecraftClient;handleBlockBreaking(Z)V"},
+      at = {@At("HEAD")},
+      cancellable = true
+   )
+   private void sculk$nukerOwnsBreaking(boolean breaking, CallbackInfo ci) {
+      Nuker nuker = SculkClient.get(Nuker.class);
+      if (nuker != null && nuker.ownsBreaking()) {
+         ci.cancel();
+      }
    }
 }
