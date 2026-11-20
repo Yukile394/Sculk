@@ -72,6 +72,12 @@ public final class ModuleManager {
    public static void tick() {
       MinecraftClient mc = MinecraftClient.getInstance();
       pollKeys();
+      if (mc.player == null || mc.world == null) {
+         dev.sculk.util.RotationManager.reset();
+      } else {
+         dev.sculk.util.RotationManager.tick();
+      }
+
       if (mc.player != null && mc.world != null) {
          for (Module module : MODULAR) {
             if (module.isEnabled()) {
