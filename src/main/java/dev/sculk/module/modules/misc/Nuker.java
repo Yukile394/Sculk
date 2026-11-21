@@ -753,8 +753,10 @@ public final class Nuker extends Module {
    }
 
    private void lookAt(BlockPos pos) {
+      // silent: the entity carries the aim, camera and mouse stay free (the old direct setYaw made the model snap and fought the mouse)
       Rotation wanted = RotationUtils.direction(this.mc.player, Vec3d.ofCenter(pos));
-      this.mc.player.setYaw((float)wanted.yaw());
-      this.mc.player.setPitch(MathHelper.clamp((float)wanted.pitch(), -90.0F, 90.0F));
+      float curYaw = this.mc.player.getYaw();
+      float yaw = curYaw + MathHelper.wrapDegrees((float)wanted.yaw() - curYaw);
+      RotationManager.set(yaw, MathHelper.clamp((float)wanted.pitch(), -90.0F, 90.0F), true, true);
    }
 }
