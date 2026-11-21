@@ -141,8 +141,7 @@ public abstract class AimAssistModule extends Module {
    }
 
    private int activeSlot() {
-      AutoFirework firework = SculkClient.get(AutoFirework.class);
-      return firework != null ? firework.effectiveSlot() : this.mc.player.getInventory().selectedSlot;
+      return this.mc.player.getInventory().selectedSlot;
    }
 
    public Entity currentTarget() { return this.target; }
