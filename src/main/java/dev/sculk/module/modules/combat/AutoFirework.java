@@ -11,6 +11,7 @@ import dev.sculk.util.CombatUtils;
 import dev.sculk.util.Friends;
 import dev.sculk.util.Timer;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.decoration.ArmorStandEntity;
@@ -71,10 +72,13 @@ public final class AutoFirework extends Module {
       .visibleWhen(() -> this.lockSlot.get());
    private final BooleanSetting aimSync = new BooleanSetting("Aim Sync", true)
       .describe("Also hits the entity Aim Assist is locked on");
+   private final BooleanSetting silent = new BooleanSetting("Silent", true)
+      .describe("Weapon in hand: rockets are fired from the offhand, the hotbar slot is never changed. Stocks the offhand while it is empty");
    private final NumberSetting cooldownThreshold = new NumberSetting("CD Threshold", 1.0, 0.85, 1.0, 0.01)
       .describe("Vurus icin gereken minimum item cooldown progress (1.0 = tam sifirlanmis)");
 
    private final Timer timer = new Timer();
+   private long nextStockAt;
    private int tempPrevious = -1;
    private long tempAt;
    private long failedAt;
@@ -105,6 +109,7 @@ public final class AutoFirework extends Module {
             this.playersOnly,
             this.rocketWindow,
             this.aimSync,
+            this.silent,
             this.cooldownThreshold
          }
       );
@@ -185,6 +190,19 @@ public final class AutoFirework extends Module {
             Entity enemy = this.nearestEnemy(player);
             this.focus = enemy;
             PlayerInventory inventory = player.getInventory();
+
+            // Silent: weapon stays selected and the rocket comes from the offhand, so no HELD_ITEM_CHANGE is ever sent
+            if (this.silent.get() && this.holdingWeapon(player)) {
+               if (player.getOffHandStack().isOf(Items.FIREWORK_ROCKET)) {
+                  this.inCombat = false;
+                  this.rocketTick(gliding);
+                  return;
+               }
+
+               if (!gliding) {
+                  this.stockOffhand(player);
+               }
+            }
 
             if (!this.lockSlot.get() || this.rocketSlotIndex < 0) {
                this.inCombat = false;
@@ -413,9 +431,9 @@ public final class AutoFirework extends Module {
       if (System.currentTimeMillis() - this.failedAt < 500L) {
          return false;
       } else if (player.getOffHandStack().isOf(Items.FIREWORK_ROCKET)) {
-         return this.accepted(this.mc.interactionManager.interactItem(player, Hand.OFF_HAND));
+         return this.useHand(player, Hand.OFF_HAND);
       } else if (player.getMainHandStack().isOf(Items.FIREWORK_ROCKET)) {
-         boolean used = this.accepted(this.mc.interactionManager.interactItem(player, Hand.MAIN_HAND));
+         boolean used = this.useHand(player, Hand.MAIN_HAND);
          if (!used) {
             this.failedAt = System.currentTimeMillis();
          }
@@ -433,7 +451,7 @@ public final class AutoFirework extends Module {
             }
 
             player.getInventory().selectedSlot = rocket;
-            boolean used = this.accepted(this.mc.interactionManager.interactItem(player, Hand.MAIN_HAND));
+            boolean used = this.useHand(player, Hand.MAIN_HAND);
             if (!used) {
                this.failedAt = System.currentTimeMillis();
                this.restoreTemp();
@@ -444,6 +462,51 @@ public final class AutoFirework extends Module {
             }
          }
       }
+   }
+
+   private boolean holdingWeapon(ClientPlayerEntity player) {
+      Item held = player.getMainHandStack().getItem();
+      return held instanceof SwordItem || held instanceof AxeItem || held instanceof MaceItem || held instanceof TridentItem;
+   }
+
+   /**
+    * Moves a rocket stack into the empty offhand with the same inventory click as pressing F over the stack
+    * (SWAP, button 40). Only runs while the offhand is empty (never displaces a totem), on the ground, with no
+    * screen open, and at a random 250-600 ms spacing. Hotbar slot i is container slot 36 + i, main inventory 9..35.
+    */
+   private void stockOffhand(ClientPlayerEntity player) {
+      long now = System.currentTimeMillis();
+      if (now < this.nextStockAt || this.mc.currentScreen != null || player.isUsingItem() || !player.getOffHandStack().isEmpty()) {
+         return;
+      }
+
+      int source = -1;
+      for (int i = 9; i < 36 && source < 0; i++) {
+         if (player.getInventory().getStack(i).isOf(Items.FIREWORK_ROCKET)) {
+            source = i;
+         }
+      }
+
+      for (int i = 0; i < 9 && source < 0; i++) {
+         if (player.getInventory().getStack(i).isOf(Items.FIREWORK_ROCKET)) {
+            source = 36 + i;
+         }
+      }
+
+      this.nextStockAt = now + 250L + (long)(Math.random() * 350.0);
+      if (source >= 0) {
+         this.mc.interactionManager.clickSlot(player.playerScreenHandler.syncId, source, 40, SlotActionType.SWAP, player);
+      }
+   }
+
+   /** Vanilla use: the hand swings after a successful use, which the server-side shoot check expects. */
+   private boolean useHand(ClientPlayerEntity player, Hand hand) {
+      ActionResult result = this.mc.interactionManager.interactItem(player, hand);
+      if (result == ActionResult.SUCCESS) {
+         player.swingHand(hand);
+      }
+
+      return this.accepted(result);
    }
 
    private void restoreTempIfDue() {

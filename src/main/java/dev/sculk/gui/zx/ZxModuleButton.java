@@ -12,7 +12,8 @@ import net.minecraft.client.gui.DrawContext;
 
 /** Module row: left click toggles, right click opens the settings, middle click binds (toggle / hold). */
 public final class ZxModuleButton implements Zx.Focusable {
-   public static final float ROW = 13.0F;
+   public static final float ROW = 15.0F;
+   private static final float INSET = 3.0F;
    public final Module module;
    private final List<ZxElement> elements = new ArrayList<>();
    private boolean open;
@@ -56,6 +57,8 @@ public final class ZxModuleButton implements Zx.Focusable {
    }
 
    public void render(DrawContext c, int mx, int my, float x, float y, float w, boolean mouseOk) {
+      float bx = x + INSET;
+      float bw = w - INSET * 2.0F;
       this.hovered = mouseOk && Render2D.hovered(mx, my, x, y, w, ROW);
       if (this.hovered) {
          if (!this.prevHovered) {
@@ -71,13 +74,13 @@ public final class ZxModuleButton implements Zx.Focusable {
 
       if (this.expand > 0.01F) {
          float areaH = (this.elementsHeight() + 2.0F) * this.expand;
-         Render2D.rect(c, x, y + ROW, w, areaH, Theme.GUI_SETTINGS);
-         Render2D.scissor(c, x, y + ROW, x + w, y + ROW + areaH);
+         Render2D.roundedRect(c, bx, y + ROW - 3.0F, bw, areaH + 3.0F, 4.0F, Theme.GUI_SETTINGS);
+         Render2D.scissor(c, bx, y + ROW, bx + bw, y + ROW + areaH);
          float cursor = y + ROW + 2.0F;
 
          for (ZxElement element : this.elements) {
             if (element.visible()) {
-               element.place(x, cursor, w);
+               element.place(bx, cursor, bw);
                element.render(c, mx, my, mouseOk && Render2D.hovered(mx, my, x, y + ROW, w, areaH));
                cursor += element.height();
             }
@@ -86,32 +89,37 @@ public final class ZxModuleButton implements Zx.Focusable {
          Render2D.endScissor(c);
       }
 
-      Render2D.rect(c, x, y, w, ROW, Theme.GUI_MODULE);
       if (this.hovered) {
-         Render2D.rect(c, x, y, w, ROW, 0x0EFFFFFF);
+         Render2D.roundedRect(c, bx, y + 1.0F, bw, ROW - 2.0F, 4.0F, 0x16FFFFFF);
       }
 
       if (this.enabledAnim > 0.02F) {
-         Render2D.gradientH(
-            c, x, y, x + w, y + ROW, Theme.scaleAlpha(Theme.ACCENT, this.enabledAnim * 0.85F), Theme.scaleAlpha(Theme.ACCENT2, this.enabledAnim * 0.55F)
-         );
-         Render2D.rect(c, x, y, 2.0F, ROW, Theme.scaleAlpha(0xFFFFFFFF, this.enabledAnim));
-      }
-
-      if (this.open) {
-         Render2D.rect(c, x, y + ROW - 0.5F, w, 0.5F, 0x28FFFFFF);
+         Render2D.roundedRect(c, bx, y + 1.0F, bw, ROW - 2.0F, 4.0F, Theme.scaleAlpha(Theme.ACCENT, 0.24F * this.enabledAnim));
+         Render2D.roundedRect(c, bx + 1.5F, y + 3.5F, 2.0F, ROW - 7.0F, 1.0F, Theme.scaleAlpha(Theme.ACCENT, this.enabledAnim));
       }
 
       float ty = Zx.textY(y, ROW);
+      float right = bx + bw - 6.0F;
+      boolean hasSettings = !this.elements.isEmpty();
+      if (hasSettings) {
+         int dot = this.open ? Theme.ACCENT : 0x78FFFFFF;
+         float cy = y + ROW / 2.0F;
+         Render2D.rect(c, right - 1.0F, cy - 4.0F, 2.0F, 2.0F, dot);
+         Render2D.rect(c, right - 1.0F, cy - 1.0F, 2.0F, 2.0F, dot);
+         Render2D.rect(c, right - 1.0F, cy + 2.0F, 2.0F, 2.0F, dot);
+         right -= 8.0F;
+      }
+
       if (this.binding) {
-         Fonts.draw(c, "PressKey", x + 6.0F, ty, 0xFFFFFFFF);
+         Fonts.draw(c, "Press a key", bx + 8.0F, ty, Theme.GUI_TEXT);
          String mode = this.module.isHoldBind() ? "Hold" : "Toggle";
-         Fonts.draw(c, mode, x + w - 6.0F - (float)Fonts.width(mode), ty, 0xFFFFFFFF);
+         Fonts.draw(c, mode, right - (float)Fonts.width(mode), ty, Theme.ACCENT);
       } else {
-         Fonts.draw(c, this.module.getName(), x + 6.0F, ty, 0xFFFFFFFF);
+         int nameColor = Theme.mix(0xFFA6AABA, 0xFFFFFFFF, this.enabledAnim);
+         Fonts.draw(c, this.module.getName(), bx + 8.0F, ty, nameColor, this.enabledAnim > 0.5F);
          if (this.module.getKey() >= 0) {
             String bind = Zx.keyName(this.module.getKey()) + (this.module.isHoldBind() ? "*" : "");
-            Fonts.draw(c, bind, x + w - 6.0F - (float)Fonts.width(bind), ty, 0xB4FFFFFF);
+            Fonts.draw(c, bind, right - (float)Fonts.width(bind), ty, 0x9EFFFFFF);
          }
       }
    }

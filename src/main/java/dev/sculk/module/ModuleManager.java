@@ -8,7 +8,6 @@ import dev.sculk.module.modules.client.SoundsModule;
 import dev.sculk.module.modules.combat.AutoFirework;
 import dev.sculk.module.modules.combat.Aura;
 import dev.sculk.module.modules.combat.AutoTotem;
-import dev.sculk.module.modules.combat.ElytraTarget;
 import dev.sculk.module.modules.misc.Nuker;
 import dev.sculk.module.modules.render.Fullbright;
 import dev.sculk.module.modules.combat.Criticals;
@@ -18,7 +17,6 @@ import dev.sculk.module.modules.combat.Fps14;
 import dev.sculk.module.modules.combat.Fps31;
 import dev.sculk.module.modules.combat.Fps32;
 import dev.sculk.module.modules.render.TargetEsp;
-import dev.sculk.render.Toasts;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -149,10 +147,6 @@ public final class ModuleManager {
             if (combo) {
                Fps15 gui = get(Fps15.class);
                if (gui != null) {
-                  if (!gui.isEnabled()) {
-                     Toasts.show("made by bluerr");
-                  }
-
                   gui.toggle();
                }
             } else {
@@ -201,7 +195,6 @@ public final class ModuleManager {
       MODULAR.add(new Fps31());
       MODULAR.add(new Fps32());
       MODULAR.add(new Criticals());
-      MODULAR.add(new ElytraTarget());
       MODULAR.add(new Aura());
       MODULAR.add(new AutoTotem());
       MODULAR.add(new Nuker());

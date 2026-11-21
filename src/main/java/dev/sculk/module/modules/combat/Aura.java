@@ -213,31 +213,11 @@ public final class Aura extends Module {
 
    // -------------------------------------------------------------- rotation
 
-   private ElytraTarget elytraTarget() {
-      return SculkClient.get(ElytraTarget.class);
-   }
-
    private Box getTargetBox(Entity entity) {
-      if (entity == this.target) {
-         ElytraTarget et = this.elytraTarget();
-         if (et != null && et.isActive(this.target)) {
-            Box predicted = et.getPredictedBox();
-            if (predicted != null) {
-               return predicted;
-            }
-         }
-      }
-
       return entity.getBoundingBox();
    }
 
-   /** Sharp elytra rotation forces HvH while gliding (ElytraTarget > SharpRot). */
    private Aura.Mode getEffectiveRotationMode() {
-      ElytraTarget et = this.elytraTarget();
-      if (this.mc.player != null && this.mc.player.isFallFlying() && et != null && et.isEnabled() && et.sharpRot()) {
-         return Aura.Mode.HvH;
-      }
-
       return this.rotationMode.getValue();
    }
 
@@ -313,11 +293,9 @@ public final class Aura extends Module {
       );
       this.lookingAtHitbox = this.isLookingAtHitbox(this.rotationYaw, this.rotationPitch, this.target, this.getRange());
 
-      // elytra: the target moves too fast for the smoothed aim, snap onto the predicted hitbox centre
+      // elytra: the target moves too fast for the smoothed aim, snap onto the target's eye position
       if (!this.lookingAtHitbox && this.mc.player.isFallFlying() && this.getEffectiveRotationMode() == Aura.Mode.HvH && this.autoCrit()) {
-         ElytraTarget et = this.elytraTarget();
-         Box predicted = et != null && et.isActive(this.target) ? et.getPredictedBox() : null;
-         Vec3d aim = predicted != null ? predicted.getCenter() : new Vec3d(this.target.getX(), this.target.getEyeY(), this.target.getZ());
+         Vec3d aim = new Vec3d(this.target.getX(), this.target.getEyeY(), this.target.getZ());
          float[] snap = this.anglesTo(aim);
          this.applyRotation(
             this.quantizer.yaw(this.mc.player.getYaw(), snap[0]),

@@ -74,7 +74,7 @@ public abstract class ZxElement {
    }
 
    protected void label(DrawContext context, String text, float dy) {
-      Fonts.draw(context, text, this.x + 6.0F, this.y + dy, 0xFFFFFFFF);
+      Fonts.draw(context, text, this.x + 6.0F, this.y + dy, Theme.GUI_TEXT);
    }
 
    // ───────────────────────────── boolean ─────────────────────────────
@@ -98,10 +98,10 @@ public abstract class ZxElement {
       public void render(DrawContext c, int mx, int my, boolean ok) {
          this.hover(mx, my, ok);
          this.anim = Zx.fast(this.anim, this.s.get() ? 1.0F : 0.0F, 20.0F);
-         float px = this.x + this.w - 21.0F;
+         float px = this.x + this.w - 23.0F;
          float py = this.y + this.h / 2.0F - 4.0F;
-         Render2D.roundedRect(c, px, py, 15.0F, 8.0F, 2.0F, Theme.mix(0x28FFFFFF, Theme.ACCENT, this.anim));
-         Render2D.roundedRect(c, px + 1.0F + 7.0F * this.anim, py + 1.0F, 6.0F, 6.0F, 2.0F, 0xFFFFFFFF);
+         Render2D.roundedRect(c, px, py, 17.0F, 8.0F, 4.0F, Theme.mix(0x30FFFFFF, Theme.ACCENT, this.anim));
+         Render2D.circle(c, px + 4.0F + 9.0F * this.anim, py + 4.0F, 3.0F, 0xFFFFFFFF);
          this.label(c, this.s.getName(), 3.0F);
       }
 
@@ -154,10 +154,12 @@ public abstract class ZxElement {
          this.anim = Zx.fast(this.anim, (float)this.s.fraction(), 22.0F);
          String value = this.typing ? (this.typed.length() == 0 ? "..." : this.typed.toString()) : this.s.display();
          this.label(c, this.s.getName(), 3.0F);
-         Fonts.draw(c, value, this.x + this.w - 6.0F - (float)Fonts.width(value), this.y + 3.0F, 0xFFFFFFFF);
-         Render2D.rect(c, this.x + 6.0F, this.y + this.h - 6.0F, this.w - 12.0F, 2.0F, 0x28FFFFFF);
-         Render2D.gradientH(c, this.x + 6.0F, this.y + this.h - 6.0F, this.x + 6.0F + (this.w - 12.0F) * this.anim, this.y + this.h - 4.0F, Theme.ACCENT2, Theme.ACCENT);
-         Render2D.rect(c, this.x + 6.0F + (this.w - 14.0F) * this.anim, this.y + this.h - 7.5F, 2.0F, 5.0F, 0xFFE0E0E0);
+         Fonts.draw(c, value, this.x + this.w - 6.0F - (float)Fonts.width(value), this.y + 3.0F, Theme.ACCENT);
+         float trackY = this.y + this.h - 6.0F;
+         float trackW = this.w - 12.0F;
+         Render2D.roundedRect(c, this.x + 6.0F, trackY, trackW, 2.0F, 1.0F, 0x2EFFFFFF);
+         Render2D.roundedRect(c, this.x + 6.0F, trackY, Math.max(2.0F, trackW * this.anim), 2.0F, 1.0F, Theme.ACCENT);
+         Render2D.circle(c, this.x + 6.0F + trackW * this.anim, trackY + 1.0F, 3.0F, 0xFFF2F4FA);
       }
 
       @Override
@@ -244,13 +246,20 @@ public abstract class ZxElement {
          this.rotate = Zx.fast(this.rotate, this.open ? 1.0F : 0.0F, 15.0F);
          this.label(c, this.s.getName(), 3.0F);
          String value = this.s.display();
-         Fonts.draw(c, value, this.x + this.w - 14.0F - (float)Fonts.width(value), this.y + 3.0F, 0xFFFFFFFF);
-         Fonts.draw(c, this.open ? "-" : "+", this.x + this.w - 9.0F, this.y + 3.0F, 0xFFB0B0BA);
+         Fonts.draw(c, value, this.x + this.w - 14.0F - (float)Fonts.width(value), this.y + 3.0F, Theme.ACCENT);
+         Fonts.draw(c, this.open ? "-" : "+", this.x + this.w - 9.0F, this.y + 3.0F, Theme.GUI_TEXT_DIM);
          if (this.open) {
             for (int i = 0; i < this.s.values().length; i++) {
                String name = this.s.display(i);
-               int color = i == this.s.index() ? Theme.ACCENT : 0xFFFFFFFF;
-               Fonts.draw(c, name, this.x + this.w / 2.0F - (float)Fonts.width(name) / 2.0F, this.y + 15.0F + (float)(i * 12), color);
+               float rowY = this.y + 13.0F + (float)(i * 12);
+               boolean selected = i == this.s.index();
+               if (selected) {
+                  Render2D.roundedRect(c, this.x + 4.0F, rowY + 0.5F, this.w - 8.0F, 11.0F, 3.0F, Theme.scaleAlpha(Theme.ACCENT, 0.22F));
+               } else if (ok && Render2D.hovered(mx, my, this.x, rowY, this.w, 12.0)) {
+                  Render2D.roundedRect(c, this.x + 4.0F, rowY + 0.5F, this.w - 8.0F, 11.0F, 3.0F, 0x14FFFFFF);
+               }
+
+               Fonts.draw(c, name, this.x + this.w / 2.0F - (float)Fonts.width(name) / 2.0F, rowY + 2.0F, selected ? Theme.ACCENT : Theme.GUI_TEXT);
             }
          }
       }
@@ -308,8 +317,8 @@ public abstract class ZxElement {
          this.label(c, this.s.getName(), 3.0F);
          String text = this.s.isListening() ? "..." : Zx.keyName(this.s.getKey());
          float tw = (float)Fonts.width(text);
-         Render2D.rect(c, this.x + this.w - tw - 11.0F, this.y + 2.0F, tw + 6.0F, 10.0F, 0x94000000);
-         Fonts.draw(c, text, this.x + this.w - tw - 8.0F, this.y + 3.0F, 0xFFFFFFFF);
+         Render2D.roundedRect(c, this.x + this.w - tw - 12.0F, this.y + 1.5F, tw + 8.0F, 10.0F, 3.0F, Theme.GUI_FIELD);
+         Fonts.draw(c, text, this.x + this.w - tw - 8.0F, this.y + 3.0F, this.s.isListening() ? Theme.ACCENT : Theme.GUI_TEXT);
       }
 
       @Override
@@ -362,8 +371,8 @@ public abstract class ZxElement {
          this.label(c, this.s.getName(), 3.0F);
          String text = this.s.getValue() + (this.focused && System.currentTimeMillis() / 400L % 2L == 0L ? "_" : "");
          float tw = (float)Math.min(60, Fonts.width(text));
-         Render2D.rect(c, this.x + this.w - tw - 11.0F, this.y + 2.0F, tw + 6.0F, 10.0F, 0x94000000);
-         Fonts.draw(c, Render2D.truncate(text, 60), this.x + this.w - tw - 8.0F, this.y + 3.0F, 0xFFFFFFFF);
+         Render2D.roundedRect(c, this.x + this.w - tw - 12.0F, this.y + 1.5F, tw + 8.0F, 10.0F, 3.0F, Theme.GUI_FIELD);
+         Fonts.draw(c, Render2D.truncate(text, 60), this.x + this.w - tw - 8.0F, this.y + 3.0F, Theme.GUI_TEXT);
       }
 
       @Override
@@ -422,9 +431,13 @@ public abstract class ZxElement {
       public void render(DrawContext c, int mx, int my, boolean ok) {
          boolean hovered = this.hover(mx, my, ok);
          boolean armed = System.currentTimeMillis() - this.armedAt < 3000L;
-         Render2D.rect(c, this.x + 4.0F, this.y + 1.0F, this.w - 8.0F, this.h - 2.0F, hovered ? 0xFF22222B : 0xFF181820);
+         Render2D.roundedRect(c, this.x + 4.0F, this.y + 1.0F, this.w - 8.0F, this.h - 2.0F, 4.0F, hovered ? Theme.GUI_FIELD_HOVER : Theme.GUI_FIELD);
+         if (armed) {
+            Render2D.roundedOutline(c, this.x + 4.0F, this.y + 1.0F, this.w - 8.0F, this.h - 2.0F, 4.0F, 1.0F, Theme.ACCENT);
+         }
+
          String text = armed ? "Click again" : this.s.getName();
-         Fonts.drawCentered(c, text, this.x + this.w / 2.0F, this.y + 3.0F, armed ? Theme.ACCENT : 0xFFFFFFFF, false);
+         Fonts.drawCentered(c, text, this.x + this.w / 2.0F, this.y + 3.0F, armed ? Theme.ACCENT : Theme.GUI_TEXT, false);
       }
 
       @Override

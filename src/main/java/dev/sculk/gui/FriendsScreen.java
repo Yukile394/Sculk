@@ -3,9 +3,9 @@ package dev.sculk.gui;
 import dev.sculk.SculkClient;
 import dev.sculk.gui.zx.Zx;
 import dev.sculk.gui.zx.ZxFriendsPanel;
-import dev.sculk.module.modules.client.Fps24;
 import dev.sculk.module.modules.client.Fps25;
-import dev.sculk.render.Fonts;
+import dev.sculk.gui.zx.ZxBackdrop;
+import dev.sculk.gui.zx.ZxPanel;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
@@ -19,9 +19,7 @@ public final class FriendsScreen extends Screen {
    }
 
    protected void init() {
-      Fps24 colors = SculkClient.get(Fps24.class);
-      Fonts.custom = colors != null && colors.sfFont();
-      this.panel = new ZxFriendsPanel((float)(this.width - 108) / 2.0F, Math.max(20.0F, (float)this.height / 2.0F - 110.0F));
+      this.panel = new ZxFriendsPanel(((float)this.width - ZxPanel.WIDTH) / 2.0F, Math.max(20.0F, (float)this.height / 2.0F - 110.0F));
       Zx.search = "";
    }
 
@@ -31,7 +29,7 @@ public final class FriendsScreen extends Screen {
 
    public void render(DrawContext context, int mouseX, int mouseY, float delta) {
       Zx.frame();
-      context.fill(0, 0, this.width, this.height, 0xA0000000);
+      ZxBackdrop.render(context, this.width, this.height, mouseX, 1.0F);
       this.panel.render(context, mouseX, mouseY);
    }
 

@@ -15,10 +15,15 @@ public final class Theme {
    /** Second gradient colour (ZeltrixWare style accent gradient). */
    public static int ACCENT2 = -8365735;
    /** Click GUI body colour (ZeltrixWare BgColor). */
-   public static int BODY = 0xF50E0E12;
-   public static final int GUI_HEADER = 0xFF16161C;
-   public static final int GUI_MODULE = 0xFF14141A;
-   public static final int GUI_SETTINGS = 0xFF0D0D11;
+   public static int BODY = 0xEE10121A;
+   public static final int GUI_HEADER = 0xFF181A24;
+   public static final int GUI_MODULE = 0xFF14161E;
+   public static final int GUI_SETTINGS = 0xFF0B0C12;
+   public static final int GUI_TEXT = 0xFFE6E8F0;
+   public static final int GUI_TEXT_DIM = 0xFF8D91A3;
+   public static final int GUI_FIELD = 0xFF181A23;
+   public static final int GUI_FIELD_HOVER = 0xFF222532;
+   public static final int GUI_LINE = 0x1EFFFFFF;
 
    private Theme() {
    }

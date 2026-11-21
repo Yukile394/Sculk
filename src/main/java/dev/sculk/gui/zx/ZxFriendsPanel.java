@@ -2,6 +2,7 @@ package dev.sculk.gui.zx;
 
 import dev.sculk.render.Fonts;
 import dev.sculk.render.Render2D;
+import dev.sculk.render.Theme;
 import dev.sculk.sound.Sounds;
 import dev.sculk.util.Friends;
 import java.util.ArrayList;
@@ -76,15 +77,15 @@ public final class ZxFriendsPanel extends ZxPanel {
       float fieldW = this.w - 24.0F;
       this.input.render(c, this.x + 4.0F, top + 2.0F, fieldW, 11.0F, "Name", mouseOk && Render2D.hovered(mx, my, this.x + 4.0F, top + 2.0F, fieldW, 11.0));
       boolean plus = mouseOk && Render2D.hovered(mx, my, this.x + this.w - 18.0F, top + 2.0F, 14.0, 11.0);
-      Render2D.rect(c, this.x + this.w - 18.0F, top + 2.0F, 14.0F, 11.0F, plus ? 0xFF22222B : 0xFF181820);
-      Fonts.drawCentered(c, "+", this.x + this.w - 11.0F, top + 3.0F, 0xFFFFFFFF, true);
+      Render2D.roundedRect(c, this.x + this.w - 18.0F, top + 2.0F, 14.0F, 11.0F, 3.0F, plus ? Theme.GUI_FIELD_HOVER : Theme.GUI_FIELD);
+      Fonts.drawCentered(c, "+", this.x + this.w - 11.0F, top + 3.0F, Theme.ACCENT, true);
       float cursor = top + 17.0F;
       List<String> online = this.online();
 
       for (String name : Friends.names()) {
          boolean here = online.stream().anyMatch(n -> n.equalsIgnoreCase(name));
-         Render2D.rect(c, this.x, cursor, this.w, ROW, mouseOk && Render2D.hovered(mx, my, this.x, cursor, this.w, ROW) ? 0xFF1E1E27 : 0xFF14141A);
-         Fonts.draw(c, Render2D.truncate(name, 60), this.x + 6.0F, Zx.textY(cursor, ROW), 0xFFFFFFFF);
+         Render2D.roundedRect(c, this.x + 3.0F, cursor + 0.5F, this.w - 6.0F, ROW - 1.0F, 4.0F, mouseOk && Render2D.hovered(mx, my, this.x, cursor, this.w, ROW) ? Theme.GUI_FIELD_HOVER : Theme.GUI_MODULE);
+         Fonts.draw(c, Render2D.truncate(name, 60), this.x + 8.0F, Zx.textY(cursor, ROW), Theme.GUI_TEXT);
          if (here) {
             Fonts.draw(c, "on", this.x + this.w - 26.0F, Zx.textY(cursor, ROW), 0xFF55FF77);
          }
@@ -95,12 +96,12 @@ public final class ZxFriendsPanel extends ZxPanel {
 
       List<String> quick = this.addable();
       if (!quick.isEmpty()) {
-         Fonts.draw(c, "Online", this.x + 6.0F, cursor + 2.0F, 0x80FFFFFF);
+         Fonts.draw(c, "Online", this.x + 8.0F, cursor + 2.0F, Theme.GUI_TEXT_DIM);
          cursor += 12.0F;
 
          for (String name : quick) {
-            Render2D.rect(c, this.x, cursor, this.w, ROW, mouseOk && Render2D.hovered(mx, my, this.x, cursor, this.w, ROW) ? 0xFF1E1E27 : 0xFF101015);
-            Fonts.draw(c, Render2D.truncate(name, 70), this.x + 6.0F, Zx.textY(cursor, ROW), 0xFFC8C8D0);
+            Render2D.roundedRect(c, this.x + 3.0F, cursor + 0.5F, this.w - 6.0F, ROW - 1.0F, 4.0F, mouseOk && Render2D.hovered(mx, my, this.x, cursor, this.w, ROW) ? Theme.GUI_FIELD_HOVER : Theme.GUI_SETTINGS);
+            Fonts.draw(c, Render2D.truncate(name, 70), this.x + 8.0F, Zx.textY(cursor, ROW), 0xFFC8CCD8);
             Fonts.draw(c, "+", this.x + this.w - 10.0F, Zx.textY(cursor, ROW), 0xFF55FF77);
             cursor += ROW;
          }

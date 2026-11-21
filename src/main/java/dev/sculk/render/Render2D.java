@@ -1,7 +1,6 @@
 package dev.sculk.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.BufferRenderer;
@@ -166,7 +165,7 @@ public final class Render2D {
    }
 
    public static void text(DrawContext context, String text, float x, float y, int color, boolean shadow) {
-      context.drawText(MinecraftClient.getInstance().textRenderer, text, Math.round(x), Math.round(y), color, shadow);
+      Fonts.draw(context, text, x, y, color, false, shadow);
    }
 
    public static void textCentered(DrawContext context, String text, float centerX, float y, int color) {
@@ -174,7 +173,7 @@ public final class Render2D {
    }
 
    public static int textWidth(String text) {
-      return MinecraftClient.getInstance().textRenderer.getWidth(text);
+      return Fonts.width(text);
    }
 
    public static String truncate(String text, int maxWidth) {

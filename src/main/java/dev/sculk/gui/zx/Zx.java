@@ -2,6 +2,7 @@ package dev.sculk.gui.zx;
 
 import dev.sculk.render.Fonts;
 import dev.sculk.render.Render2D;
+import dev.sculk.render.Theme;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.util.InputUtil;
 
@@ -68,6 +69,7 @@ public final class Zx {
    public static final class TextField implements Focusable {
       public final StringBuilder text = new StringBuilder();
       public boolean focused;
+      public float radius = 3.0F;
       private final int max;
       private final Runnable onEnter;
 
@@ -77,12 +79,13 @@ public final class Zx {
       }
 
       public void render(DrawContext context, float x, float y, float w, float h, String placeholder, boolean hovered) {
-         Render2D.rect(context, x, y, w, h, hovered || this.focused ? 0xFF22222B : 0xFF181820);
-         Render2D.rect(context, x, y + h - 1.0F, w, 1.0F, this.focused ? dev.sculk.render.Theme.ACCENT : 0x22FFFFFF);
+         Render2D.roundedRect(context, x, y, w, h, this.radius, hovered || this.focused ? Theme.GUI_FIELD_HOVER : Theme.GUI_FIELD);
+         Render2D.roundedOutline(context, x, y, w, h, this.radius, 1.0F, this.focused ? Theme.ACCENT : Theme.GUI_LINE);
          boolean blink = System.currentTimeMillis() / 400L % 2L == 0L;
          String shown = this.text.length() == 0 && !this.focused ? placeholder : this.text + (this.focused && blink ? "_" : "");
-         int color = this.text.length() == 0 && !this.focused ? 0xFF7A7A86 : 0xFFFFFFFF;
-         Fonts.draw(context, Render2D.truncate(shown, (int)w - 6), x + 3.0F, textY(y, h), color);
+         int color = this.text.length() == 0 && !this.focused ? Theme.GUI_TEXT_DIM : Theme.GUI_TEXT;
+         float pad = Math.max(4.0F, this.radius * 0.8F);
+         Fonts.draw(context, Render2D.truncate(shown, (int)(w - pad * 2.0F)), x + pad, textY(y, h), color);
       }
 
       public void focus() {

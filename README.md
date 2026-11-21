@@ -42,4 +42,9 @@ Bootstrap'i `force` ile tekrar çalıştırmak `src/main/java` içindeki elle d�
 - Auto Firework: slot kilidi, 3.2 blok içinde fişek slotu <-> silah slotu döngüsü, dahili Trigger (EclipseCrit / PhantomCrit), Aim Assist uyumu. Trigger açıkken Trigger Bot kapanır.
 - Criticals modülü (Zeltrix modları), Target ESP (Yukile Helix / Orbit + Halo, Pulse, Cage).
 - GUI fontu: Client > GUI Colors > SF Font.
-- AttackAura kaldırıldı. Yerine Tera Client portu: Aura (HvH / Smooth rotation, GCD quantizer, tremor, rastgele saldırı gecikmesi, Smart/Only crit, sprint drop, shield breaker), AutoTotem (Default / Alternative / Matrix / MatrixPick / NewVersion, Safety ayarları) ve ElytraTarget (tahmin edilen hitbox, SharpRot, Visual). Hepsi Combat kategorisinde.
+- AttackAura kaldırıldı. Yerine Tera Client portu: Aura (HvH / Smooth rotation, GCD quantizer, tremor, rastgele saldırı gecikmesi, Smart/Only crit, sprint drop, shield breaker) ve AutoTotem (Default / Alternative / Matrix / MatrixPick / NewVersion, Safety ayarları). Hepsi Combat kategorisinde. ElytraTarget kaldırıldı.
+
+- Auto Firework: **Silent**. Elde silah varken fişek offhand'den atılır, hotbar slotu hiç değişmez (HELD_ITEM_CHANGE gönderilmez). Offhand boşken fişek yığını F tuşuyla aynı envanter tıklamasıyla (SWAP, buton 40) offhand'e alınır. Kullanım sonrası el sallanır (vanilla davranışı).
+- ClickGUI altında kalıcı "Made By Hikmet" yazısı (ortalı).
+- ClickGUI yeniden tasarlandı: gece gradyanlı arka plan, düşen kar (`render/Snow.java`, derinlik + fare rüzgârı), yuvarlatılmış gölgeli kartlar, arama hapı, modern satır / toggle / slider görünümü.
+- Tüm yazılar artık Minecraft'ın kendi fontu yerine gömülü SF Medium (normal) ve SF Bold (başlık) ile çizilir (`render/Fonts.java`; HUD dahil `Render2D.text` de aynı fontu kullanır). "SF Font" ayarı kaldırıldı.

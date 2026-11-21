@@ -12,7 +12,6 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents.EndTick;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
-import dev.sculk.module.modules.combat.ElytraTarget;
 import dev.sculk.module.modules.render.TargetEsp;
 import net.minecraft.client.render.RenderTickCounter;
 
@@ -55,12 +54,6 @@ public class SculkClient implements ClientModInitializer {
          TargetEsp esp = get(TargetEsp.class);
          if (esp != null && esp.isEnabled()) {
             esp.render(context.matrixStack(), net.minecraft.client.MinecraftClient.getInstance().getRenderTickCounter().getTickDelta(true));
-         }
-      });
-      WorldRenderEvents.LAST.register(context -> {
-         ElytraTarget elytra = get(ElytraTarget.class);
-         if (elytra != null && elytra.isEnabled()) {
-            elytra.render(context.matrixStack());
          }
       });
       ClientTickEvents.END_CLIENT_TICK.register((EndTick)client -> ModuleManager.tick());

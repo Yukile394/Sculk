@@ -6,17 +6,15 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.Style;
 import net.minecraft.text.Text;
-import net.minecraft.util.Formatting;
 import net.minecraft.util.Identifier;
 
 /**
- * Text helper for the GUI. With {@link #custom} on, ZeltrixWare's SF Medium / SF Bold TTFs
- * (assets/sculk/font/*.json) are used, otherwise the vanilla font is used.
+ * Text helper for the whole client UI. Vanilla Minecraft glyphs are never used: every string is drawn with the
+ * bundled SF Medium (normal) or SF Bold (titles) TrueType fonts declared in assets/sculk/font/*.json.
  */
 public final class Fonts {
    public static final Identifier MEDIUM = Identifier.of("sculk", "sf_medium");
    public static final Identifier BOLD = Identifier.of("sculk", "sf_bold");
-   public static boolean custom = false;
 
    private Fonts() {
    }
@@ -27,25 +25,41 @@ public final class Fonts {
 
    public static Text styled(String text, boolean bold) {
       MutableText out = Text.literal(text);
-      if (custom) {
-         out.setStyle(Style.EMPTY.withFont(bold ? BOLD : MEDIUM));
-      } else if (bold) {
-         out.formatted(Formatting.BOLD);
-      }
-
+      out.setStyle(Style.EMPTY.withFont(bold ? BOLD : MEDIUM));
       return out;
    }
 
-   public static void draw(DrawContext context, String text, float x, float y, int color, boolean bold) {
+   public static void draw(DrawContext context, String text, float x, float y, int color, boolean bold, boolean shadow) {
       if ((color >>> 24) < 4) {
          return;
       }
 
-      context.drawText(renderer(), styled(text, bold), Math.round(x), Math.round(y), color, false);
+      context.drawText(renderer(), styled(text, bold), Math.round(x), Math.round(y), color, shadow);
+   }
+
+   public static void draw(DrawContext context, String text, float x, float y, int color, boolean bold) {
+      draw(context, text, x, y, color, bold, false);
    }
 
    public static void draw(DrawContext context, String text, float x, float y, int color) {
-      draw(context, text, x, y, color, false);
+      draw(context, text, x, y, color, false, false);
+   }
+
+   public static void drawShadow(DrawContext context, String text, float x, float y, int color) {
+      draw(context, text, x, y, color, false, true);
+   }
+
+   /** Text drawn at a scale (1.0 = normal size); the position is the top-left corner of the scaled text. */
+   public static void drawScaled(DrawContext context, String text, float x, float y, float scale, int color, boolean bold) {
+      if ((color >>> 24) < 4) {
+         return;
+      }
+
+      context.getMatrices().push();
+      context.getMatrices().translate(x, y, 0.0F);
+      context.getMatrices().scale(scale, scale, 1.0F);
+      context.drawText(renderer(), styled(text, bold), 0, 0, color, false);
+      context.getMatrices().pop();
    }
 
    public static void drawCentered(DrawContext context, String text, float centerX, float y, int color, boolean bold) {

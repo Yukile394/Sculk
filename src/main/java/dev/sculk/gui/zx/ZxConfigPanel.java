@@ -3,6 +3,7 @@ package dev.sculk.gui.zx;
 import dev.sculk.SculkClient;
 import dev.sculk.render.Fonts;
 import dev.sculk.render.Render2D;
+import dev.sculk.render.Theme;
 import dev.sculk.render.Toasts;
 import dev.sculk.sound.Sounds;
 import dev.sculk.util.ConfigManager;
@@ -46,13 +47,13 @@ public final class ZxConfigPanel extends ZxPanel {
       float fieldW = this.w - 24.0F;
       this.input.render(c, this.x + 4.0F, top + 2.0F, fieldW, 11.0F, "New config", mouseOk && Render2D.hovered(mx, my, this.x + 4.0F, top + 2.0F, fieldW, 11.0));
       boolean plus = mouseOk && Render2D.hovered(mx, my, this.x + this.w - 18.0F, top + 2.0F, 14.0, 11.0);
-      Render2D.rect(c, this.x + this.w - 18.0F, top + 2.0F, 14.0F, 11.0F, plus ? 0xFF22222B : 0xFF181820);
-      Fonts.drawCentered(c, "+", this.x + this.w - 11.0F, top + 3.0F, 0xFFFFFFFF, true);
+      Render2D.roundedRect(c, this.x + this.w - 18.0F, top + 2.0F, 14.0F, 11.0F, 3.0F, plus ? Theme.GUI_FIELD_HOVER : Theme.GUI_FIELD);
+      Fonts.drawCentered(c, "+", this.x + this.w - 11.0F, top + 3.0F, Theme.ACCENT, true);
       float cursor = top + 17.0F;
 
       for (String name : this.configs) {
-         Render2D.rect(c, this.x, cursor, this.w, ROW, mouseOk && Render2D.hovered(mx, my, this.x, cursor, this.w, ROW) ? 0xFF22222A : 0xFF14141A);
-         Fonts.draw(c, Render2D.truncate(name, (int)this.w - 12), this.x + 6.0F, Zx.textY(cursor, ROW), 0xFFFFFFFF);
+         Render2D.roundedRect(c, this.x + 3.0F, cursor + 0.5F, this.w - 6.0F, ROW - 1.0F, 4.0F, mouseOk && Render2D.hovered(mx, my, this.x, cursor, this.w, ROW) ? Theme.GUI_FIELD_HOVER : Theme.GUI_MODULE);
+         Fonts.draw(c, Render2D.truncate(name, (int)this.w - 20), this.x + 8.0F, Zx.textY(cursor, ROW), Theme.GUI_TEXT);
          cursor += ROW;
       }
    }
