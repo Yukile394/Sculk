@@ -113,12 +113,85 @@ public final class RotationManager {
          player.prevYaw = player.getYaw();
          player.setPitch(MathHelper.clamp(camPitch, -90.0F, 90.0F));
          player.prevPitch = player.getPitch();
+         player.bodyYaw = player.getYaw();
+         player.prevBodyYaw = player.getYaw();
+         player.headYaw = player.getYaw();
+         player.prevHeadYaw = player.getYaw();
       }
 
       active = false;
    }
 
+   // ---------------------------------------------------------------- model smoothing (3rd person / other angles)
+
+   private static boolean smoothing;
+   private static float smoothYaw;
+   private static float smoothPitch;
+   private static long smoothAt;
+   private static final float[] SAVED = new float[10];
+
+   /**
+    * Called before the local player model is rendered. While a silent rotation is active (and until the model has caught up
+    * after it ended) the model is drawn with a low-pass filtered rotation instead of the raw per-tick aim, with head, body and
+    * the previous-tick values forced equal so the renderer has nothing to interpolate. Returns true when values were swapped.
+    */
+   public static boolean beginModelRender(ClientPlayerEntity player, float tickDelta) {
+      float rawYaw = MathHelper.lerpAngleDegrees(tickDelta, player.prevYaw, player.getYaw());
+      float rawPitch = MathHelper.lerp(tickDelta, player.prevPitch, player.getPitch());
+      long now = System.nanoTime();
+      if (!active && !smoothing) {
+         return false;
+      }
+
+      if (!smoothing) {
+         smoothing = true;
+         smoothYaw = rawYaw;
+         smoothPitch = rawPitch;
+         smoothAt = now;
+      }
+
+      float dt = Math.min((float)(now - smoothAt) / 1.0E9F, 0.1F);
+      smoothAt = now;
+      float alpha = 1.0F - (float)Math.exp(-dt * 16.0F);
+      smoothYaw += MathHelper.wrapDegrees(rawYaw - smoothYaw) * alpha;
+      smoothPitch += (rawPitch - smoothPitch) * alpha;
+      if (!active && Math.abs(MathHelper.wrapDegrees(rawYaw - smoothYaw)) < 0.5F && Math.abs(rawPitch - smoothPitch) < 0.5F) {
+         smoothing = false;
+         return false;
+      }
+
+      SAVED[0] = player.getYaw();
+      SAVED[1] = player.prevYaw;
+      SAVED[2] = player.getPitch();
+      SAVED[3] = player.prevPitch;
+      SAVED[4] = player.bodyYaw;
+      SAVED[5] = player.prevBodyYaw;
+      SAVED[6] = player.headYaw;
+      SAVED[7] = player.prevHeadYaw;
+      player.setYaw(smoothYaw);
+      player.prevYaw = smoothYaw;
+      player.setPitch(smoothPitch);
+      player.prevPitch = smoothPitch;
+      player.bodyYaw = smoothYaw;
+      player.prevBodyYaw = smoothYaw;
+      player.headYaw = smoothYaw;
+      player.prevHeadYaw = smoothYaw;
+      return true;
+   }
+
+   public static void endModelRender(ClientPlayerEntity player) {
+      player.setYaw(SAVED[0]);
+      player.prevYaw = SAVED[1];
+      player.setPitch(SAVED[2]);
+      player.prevPitch = SAVED[3];
+      player.bodyYaw = SAVED[4];
+      player.prevBodyYaw = SAVED[5];
+      player.headYaw = SAVED[6];
+      player.prevHeadYaw = SAVED[7];
+   }
+
    public static void reset() {
+      smoothing = false;
       active = false;
       lastSet = -100;
    }
