@@ -179,6 +179,41 @@ public final class RotationManager {
       return true;
    }
 
+   private static final float[] HAND_SAVED = new float[8];
+
+   /** First person hands: draw them with the camera rotation (no sway caused by the aim rotation). */
+   public static void beginHandRender(ClientPlayerEntity player) {
+      HAND_SAVED[0] = player.getYaw();
+      HAND_SAVED[1] = player.prevYaw;
+      HAND_SAVED[2] = player.getPitch();
+      HAND_SAVED[3] = player.prevPitch;
+      HAND_SAVED[4] = player.renderYaw;
+      HAND_SAVED[5] = player.lastRenderYaw;
+      HAND_SAVED[6] = player.renderPitch;
+      HAND_SAVED[7] = player.lastRenderPitch;
+      float yaw = camYaw;
+      float pitch = MathHelper.clamp(camPitch, -90.0F, 90.0F);
+      player.setYaw(yaw);
+      player.prevYaw = yaw;
+      player.setPitch(pitch);
+      player.prevPitch = pitch;
+      player.renderYaw = yaw;
+      player.lastRenderYaw = yaw;
+      player.renderPitch = pitch;
+      player.lastRenderPitch = pitch;
+   }
+
+   public static void endHandRender(ClientPlayerEntity player) {
+      player.setYaw(HAND_SAVED[0]);
+      player.prevYaw = HAND_SAVED[1];
+      player.setPitch(HAND_SAVED[2]);
+      player.prevPitch = HAND_SAVED[3];
+      player.renderYaw = HAND_SAVED[4];
+      player.lastRenderYaw = HAND_SAVED[5];
+      player.renderPitch = HAND_SAVED[6];
+      player.lastRenderPitch = HAND_SAVED[7];
+   }
+
    public static void endModelRender(ClientPlayerEntity player) {
       player.setYaw(SAVED[0]);
       player.prevYaw = SAVED[1];
