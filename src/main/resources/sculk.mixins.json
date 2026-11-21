@@ -13,7 +13,8 @@
     "Mixin7",
     "Mixin8",
     "Mixin9",
-    "Mixin10"
+    "Mixin10",
+    "Mixin11"
   ],
   "injectors": {
     "defaultRequire": 1
