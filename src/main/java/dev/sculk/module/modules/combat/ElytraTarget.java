@@ -40,13 +40,18 @@ public final class ElytraTarget extends Module {
    private final NumberSetting green = new NumberSetting("Green", 255.0, 0.0, 255.0, 1.0).visibleWhen(() -> this.visual.get());
    private final NumberSetting blue = new NumberSetting("Blue", 200.0, 0.0, 255.0, 1.0).visibleWhen(() -> this.visual.get());
    private final NumberSetting alpha = new NumberSetting("Alpha", 100.0, 10.0, 255.0, 1.0).visibleWhen(() -> this.visual.get());
+   private final BooleanSetting debug = new BooleanSetting("Debug", false).describe("Shows why the predicted box is (not) active");
    private volatile Box cachedBox;
    private double maxSpeedSeen;
    private long lastTickMs;
+   private int trackedId = Integer.MIN_VALUE;
+   private Vec3d lastPos;
+   private Vec3d measuredVelocity = Vec3d.ZERO;
+   private int debugTicks;
 
    public ElytraTarget() {
       super("ElytraTarget", "Predicts the Aura target's hitbox while you both glide (Tera Client port)", Category.COMBAT);
-      this.addSettings(new Setting[]{this.predict, this.sharpRot, this.visual, this.red, this.green, this.blue, this.alpha});
+      this.addSettings(new Setting[]{this.predict, this.sharpRot, this.visual, this.red, this.green, this.blue, this.alpha, this.debug});
    }
 
    public boolean sharpRot() {
@@ -71,6 +76,29 @@ public final class ElytraTarget extends Module {
       this.cachedBox = null;
       this.maxSpeedSeen = 0.0;
       this.lastTickMs = 0L;
+      this.trackedId = Integer.MIN_VALUE;
+      this.lastPos = null;
+      this.measuredVelocity = Vec3d.ZERO;
+   }
+
+   /**
+    * Other players' getVelocity() stays (almost) zero on the client, the server does not stream it. The speed is therefore
+    * measured from the position change per tick and the larger of the two is used.
+    */
+   private Vec3d velocityOf(Entity target) {
+      Vec3d pos = target.getPos();
+      if (target.getId() != this.trackedId || this.lastPos == null) {
+         this.trackedId = target.getId();
+         this.lastPos = pos;
+         this.measuredVelocity = Vec3d.ZERO;
+         return target.getVelocity();
+      }
+
+      Vec3d delta = pos.subtract(this.lastPos);
+      this.lastPos = pos;
+      this.measuredVelocity = this.measuredVelocity.multiply(0.4).add(delta.multiply(0.6));
+      Vec3d reported = target.getVelocity();
+      return reported.lengthSquared() > this.measuredVelocity.lengthSquared() ? reported : this.measuredVelocity;
    }
 
    /** Both the player and the given target are gliding and the target is alive. */
@@ -100,13 +128,25 @@ public final class ElytraTarget extends Module {
       this.lastTickMs = now;
       double decay = Math.pow(DECAY_PER_MS, deltaMs);
       Entity target = this.auraTarget();
+      if (target == null) {
+         this.trackedId = Integer.MIN_VALUE;
+         this.lastPos = null;
+      }
+
+      Vec3d velocity = target == null ? Vec3d.ZERO : this.velocityOf(target);
+      if (this.debug.get() && ++this.debugTicks >= 20) {
+         this.debugTicks = 0;
+         dev.sculk.render.Toasts.show(String.format(java.util.Locale.ROOT, "ElytraTarget: aura=%b target=%b you=%b them=%b speed=%.2f",
+            SculkClient.get(Aura.class) != null && SculkClient.get(Aura.class).isEnabled(), target != null, this.mc.player.isFallFlying(),
+            target instanceof LivingEntity le && le.isFallFlying(), velocity.length()));
+      }
+
       if (!this.isActive(target)) {
          this.maxSpeedSeen *= decay;
          this.cachedBox = null;
          return;
       }
 
-      Vec3d velocity = target.getVelocity();
       double speedSq = velocity.lengthSquared();
       if (speedSq < 1.0E-6) {
          this.maxSpeedSeen *= decay;
