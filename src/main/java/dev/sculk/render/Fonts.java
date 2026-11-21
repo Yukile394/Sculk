@@ -25,7 +25,8 @@ public final class Fonts {
 
    public static Text styled(String text, boolean bold) {
       MutableText out = Text.literal(text);
-      out.setStyle(Style.EMPTY.withFont(bold ? BOLD : MEDIUM));
+      // sf_bold.ttf draws missing-glyph boxes in game, so bold is Medium with the vanilla bold style instead
+      out.setStyle(Style.EMPTY.withFont(MEDIUM).withBold(bold));
       return out;
    }
 

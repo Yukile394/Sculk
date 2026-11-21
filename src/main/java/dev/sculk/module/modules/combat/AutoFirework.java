@@ -73,12 +73,14 @@ public final class AutoFirework extends Module {
    private final BooleanSetting aimSync = new BooleanSetting("Aim Sync", true)
       .describe("Also hits the entity Aim Assist is locked on");
    private final BooleanSetting silent = new BooleanSetting("Silent", true)
-      .describe("Weapon in hand: rockets are fired from the offhand, the hotbar slot is never changed. Stocks the offhand while it is empty");
+      .describe("Never changes your hotbar slot. Rockets are fired from the offhand (a shield / totem there is swapped out for one tick and back)");
    private final NumberSetting cooldownThreshold = new NumberSetting("CD Threshold", 1.0, 0.85, 1.0, 0.01)
       .describe("Vurus icin gereken minimum item cooldown progress (1.0 = tam sifirlanmis)");
 
    private final Timer timer = new Timer();
    private long nextStockAt;
+   private int swapBackSlot = -1;
+   private long swapBackAt;
    private int tempPrevious = -1;
    private long tempAt;
    private long failedAt;
@@ -138,6 +140,7 @@ public final class AutoFirework extends Module {
    @Override
    public void onDisable() {
       this.restoreTemp();
+      this.finishOffhandSwap(this.getMC().player, true);
       this.inCombat = false;
       this.focus = null;
       this.rocketSlotIndex = -1;
@@ -173,6 +176,7 @@ public final class AutoFirework extends Module {
       ClientPlayerEntity player = this.mc.player;
       if (player != null && this.mc.world != null && this.mc.interactionManager != null) {
          this.restoreTempIfDue();
+         this.finishOffhandSwap(player);
          if (this.mc.currentScreen == null && !player.isDead()) {
             this.sinceReturn++;
             this.rocketSlotIndex = this.findRocketSlot();
@@ -192,16 +196,14 @@ public final class AutoFirework extends Module {
             PlayerInventory inventory = player.getInventory();
 
             // Silent: weapon stays selected and the rocket comes from the offhand, so no HELD_ITEM_CHANGE is ever sent
-            if (this.silent.get() && this.holdingWeapon(player)) {
-               if (player.getOffHandStack().isOf(Items.FIREWORK_ROCKET)) {
-                  this.inCombat = false;
-                  this.rocketTick(gliding);
-                  return;
-               }
-
-               if (!gliding) {
+            if (this.silent.get()) {
+               this.inCombat = false;
+               if (!gliding && player.getOffHandStack().isEmpty()) {
                   this.stockOffhand(player);
                }
+
+               this.rocketTick(gliding);
+               return;
             }
 
             if (!this.lockSlot.get() || this.rocketSlotIndex < 0) {
@@ -439,6 +441,8 @@ public final class AutoFirework extends Module {
          }
 
          return used;
+      } else if (this.silent.get()) {
+         return this.useViaOffhandSwap(player);
       } else if (!this.hotbar.get()) {
          return false;
       } else {
@@ -464,38 +468,82 @@ public final class AutoFirework extends Module {
       }
    }
 
-   private boolean holdingWeapon(ClientPlayerEntity player) {
-      Item held = player.getMainHandStack().getItem();
-      return held instanceof SwordItem || held instanceof AxeItem || held instanceof MaceItem || held instanceof TridentItem;
+   /** Container slot id of a rocket stack (hotbar slot i = 36 + i, main inventory = 9..35), or -1. */
+   private int rocketContainerSlot(ClientPlayerEntity player) {
+      for (int i = 9; i < 36; i++) {
+         if (player.getInventory().getStack(i).isOf(Items.FIREWORK_ROCKET)) {
+            return i;
+         }
+      }
+
+      for (int i = 0; i < 9; i++) {
+         if (player.getInventory().getStack(i).isOf(Items.FIREWORK_ROCKET)) {
+            return 36 + i;
+         }
+      }
+
+      return -1;
+   }
+
+   private void swapWithOffhand(ClientPlayerEntity player, int containerSlot) {
+      this.mc.interactionManager.clickSlot(player.playerScreenHandler.syncId, containerSlot, 40, SlotActionType.SWAP, player);
    }
 
    /**
     * Moves a rocket stack into the empty offhand with the same inventory click as pressing F over the stack
-    * (SWAP, button 40). Only runs while the offhand is empty (never displaces a totem), on the ground, with no
-    * screen open, and at a random 250-600 ms spacing. Hotbar slot i is container slot 36 + i, main inventory 9..35.
+    * (SWAP, button 40). Only while the offhand is empty (never displaces a totem or shield), with no screen open
+    * and at a random 250-600 ms spacing.
     */
    private void stockOffhand(ClientPlayerEntity player) {
       long now = System.currentTimeMillis();
-      if (now < this.nextStockAt || this.mc.currentScreen != null || player.isUsingItem() || !player.getOffHandStack().isEmpty()) {
+      if (now < this.nextStockAt || this.mc.currentScreen != null || player.isUsingItem() || !player.getOffHandStack().isEmpty() || this.swapBackSlot >= 0) {
          return;
       }
 
-      int source = -1;
-      for (int i = 9; i < 36 && source < 0; i++) {
-         if (player.getInventory().getStack(i).isOf(Items.FIREWORK_ROCKET)) {
-            source = i;
-         }
-      }
-
-      for (int i = 0; i < 9 && source < 0; i++) {
-         if (player.getInventory().getStack(i).isOf(Items.FIREWORK_ROCKET)) {
-            source = 36 + i;
-         }
-      }
-
+      int source = this.rocketContainerSlot(player);
       this.nextStockAt = now + 250L + (long)(Math.random() * 350.0);
       if (source >= 0) {
-         this.mc.interactionManager.clickSlot(player.playerScreenHandler.syncId, source, 40, SlotActionType.SWAP, player);
+         this.swapWithOffhand(player, source);
+      }
+   }
+
+   /**
+    * Offhand is taken (shield / totem): swap a rocket stack into it, use it from the offhand, and swap back a few
+    * ticks later. Only inventory clicks and an offhand use are sent, the hotbar slot is never changed.
+    */
+   private boolean useViaOffhandSwap(ClientPlayerEntity player) {
+      if (this.swapBackSlot >= 0 || this.mc.currentScreen != null) {
+         return false;
+      }
+
+      int source = this.rocketContainerSlot(player);
+      if (source < 0) {
+         return false;
+      }
+
+      this.swapWithOffhand(player, source);
+      boolean used = this.useHand(player, Hand.OFF_HAND);
+      if (!used) {
+         this.failedAt = System.currentTimeMillis();
+      }
+
+      this.swapBackSlot = source;
+      this.swapBackAt = System.currentTimeMillis() + 60L + (long)(Math.random() * 90.0);
+      return used;
+   }
+
+   private void finishOffhandSwap(ClientPlayerEntity player) {
+      this.finishOffhandSwap(player, false);
+   }
+
+   private void finishOffhandSwap(ClientPlayerEntity player, boolean force) {
+      if (this.swapBackSlot < 0 || player == null || this.mc.interactionManager == null) {
+         return;
+      }
+
+      if (force || System.currentTimeMillis() >= this.swapBackAt) {
+         this.swapWithOffhand(player, this.swapBackSlot);
+         this.swapBackSlot = -1;
       }
    }
 
