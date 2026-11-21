@@ -10,16 +10,27 @@ import dev.sculk.module.setting.Setting;
 public final class Fps15 extends Module {
    private final BooleanSetting blur = new BooleanSetting("Blur", true).describe("Blurred game behind the GUI");
    private final BooleanSetting descriptions = new BooleanSetting("Descriptions", true).describe("Tooltip with the module / setting description");
+   private final BooleanSetting fpsBoost = new BooleanSetting("FPS Boost", true)
+      .describe("Skips the blur and uses lighter snow so the GUI stays smooth on weak devices");
+   private final BooleanSetting snow = new BooleanSetting("Snow", true).describe("Falling snow behind the GUI");
    private boolean closing;
 
    public Fps15() {
       super("ClickGUI", "Opens the sculk interface", Category.CLIENT);
-      this.addSettings(new Setting[]{this.blur, this.descriptions});
+      this.addSettings(new Setting[]{this.fpsBoost, this.blur, this.snow, this.descriptions});
       this.key(-1);
    }
 
    public boolean blur() {
       return this.blur.get();
+   }
+
+   public boolean fpsBoost() {
+      return this.fpsBoost.get();
+   }
+
+   public boolean snow() {
+      return this.snow.get();
    }
 
    public boolean descriptions() {

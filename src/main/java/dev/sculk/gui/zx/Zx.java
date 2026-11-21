@@ -52,13 +52,21 @@ public final class Zx {
       }
    }
 
+   private static final java.util.HashMap<Integer, String> KEY_NAMES = new java.util.HashMap<>();
+
    public static String keyName(int key) {
       if (key < 0) {
          return "none";
       }
 
-      String name = InputUtil.fromKeyCode(key, 0).getLocalizedText().getString();
-      return name.replace("Left ", "L").replace("Right ", "R").replace("Control", "Ctrl");
+      String cached = KEY_NAMES.get(key);
+      if (cached == null) {
+         String name = InputUtil.fromKeyCode(key, 0).getLocalizedText().getString();
+         cached = name.replace("Left ", "L").replace("Right ", "R").replace("Control", "Ctrl");
+         KEY_NAMES.put(key, cached);
+      }
+
+      return cached;
    }
 
    public static float textY(float y, float height) {

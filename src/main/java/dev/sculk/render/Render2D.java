@@ -14,29 +14,110 @@ public final class Render2D {
    private Render2D() {
    }
 
+   // ------------------------------------------------------------------------------------------------
+   // Batched shape drawing. DrawContext.fill() flushes a GL draw call every time it is called, so the old
+   // one-fill-per-pixel-row shapes cost hundreds of draw calls each. Rows are now merged into as few quads as
+   // possible (the straight middle of a rounded rect is a single quad) and every shape is one draw call.
+   // ------------------------------------------------------------------------------------------------
+
+   private static BufferBuilder batch;
+   private static Matrix4f batchMatrix;
+
+   /** Starts a quad batch; nothing is drawn until batchEnd(). Not re-entrant. */
+   public static void batchBegin(DrawContext context) {
+      batch = null;
+      batchMatrix = context.getMatrices().peek().getPositionMatrix();
+   }
+
+   public static void batchRect(float x1, float y1, float x2, float y2, int color) {
+      if (batchMatrix == null || x2 <= x1 || y2 <= y1 || (color >>> 24) < 4) {
+         return;
+      }
+
+      if (batch == null) {
+         batch = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+      }
+
+      batch.vertex(batchMatrix, x1, y1, 0.0F).color(color);
+      batch.vertex(batchMatrix, x1, y2, 0.0F).color(color);
+      batch.vertex(batchMatrix, x2, y2, 0.0F).color(color);
+      batch.vertex(batchMatrix, x2, y1, 0.0F).color(color);
+   }
+
+   /** Draws everything added since batchBegin() with a single draw call. */
+   public static void batchEnd() {
+      if (batch != null) {
+         RenderSystem.enableBlend();
+         RenderSystem.defaultBlendFunc();
+         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+         BufferRenderer.drawWithGlobalProgram(batch.end());
+         RenderSystem.disableBlend();
+         batch = null;
+      }
+
+      batchMatrix = null;
+   }
+
+   /** Merges consecutive pixel rows with identical horizontal extent into one tall quad. */
+   private static final class Run {
+      private int x1;
+      private int x2;
+      private int top;
+      private int end;
+      private boolean open;
+
+      void row(int rowX1, int rowX2, int row, int color) {
+         if (this.open && rowX1 == this.x1 && rowX2 == this.x2 && row == this.end) {
+            this.end = row + 1;
+            return;
+         }
+
+         this.flush(color);
+         this.x1 = rowX1;
+         this.x2 = rowX2;
+         this.top = row;
+         this.end = row + 1;
+         this.open = true;
+      }
+
+      void flush(int color) {
+         if (this.open) {
+            batchRect((float)this.x1, (float)this.top, (float)this.x2, (float)this.end, color);
+            this.open = false;
+         }
+      }
+   }
+
+   private static final Run RUN_A = new Run();
+   private static final Run RUN_B = new Run();
+
    public static void roundedRect(DrawContext context, float x, float y, float width, float height, float radius, int color) {
-      if (!(width <= 0.0F) && !(height <= 0.0F)) {
+      if (!(width <= 0.0F) && !(height <= 0.0F) && (color >>> 24) >= 4) {
          float r = Math.max(0.0F, Math.min(radius, Math.min(width, height) / 2.0F));
          if (r < 0.5F) {
             fill(context, x, y, x + width, y + height, color);
          } else {
             int top = (int)Math.ceil((double)y);
             int bottom = (int)Math.ceil((double)(y + height));
+            batchBegin(context);
 
             for (int row = top; row < bottom; row++) {
                float inset = cornerInset((float)row + 0.5F, y, height, r);
                int x1 = (int)Math.ceil((double)(x + inset));
                int x2 = (int)Math.floor((double)(x + width - inset));
                if (x2 > x1) {
-                  context.fill(x1, row, x2, row + 1, color);
+                  RUN_A.row(x1, x2, row, color);
                }
             }
+
+            RUN_A.flush(color);
+            batchEnd();
          }
       }
    }
 
    public static void roundedOutline(DrawContext context, float x, float y, float width, float height, float radius, float thickness, int color) {
-      if (!(width <= 0.0F) && !(height <= 0.0F)) {
+      if (!(width <= 0.0F) && !(height <= 0.0F) && (color >>> 24) >= 4) {
          float t = Math.max(1.0F, thickness);
          float r = Math.max(0.0F, Math.min(radius, Math.min(width, height) / 2.0F));
          int top = (int)Math.ceil((double)y);
@@ -44,6 +125,7 @@ public final class Render2D {
          float innerTop = y + t;
          float innerHeight = height - t * 2.0F;
          float innerRadius = Math.max(0.0F, r - t);
+         batchBegin(context);
 
          for (int row = top; row < bottom; row++) {
             float sample = (float)row + 0.5F;
@@ -56,24 +138,29 @@ public final class Render2D {
                   int ix1 = (int)Math.ceil((double)(x + t + innerInset));
                   int ix2 = (int)Math.floor((double)(x + width - t - innerInset));
                   if (ix1 > ox1) {
-                     context.fill(ox1, row, ix1, row + 1, color);
+                     RUN_A.row(ox1, ix1, row, color);
                   }
 
                   if (ox2 > ix2) {
-                     context.fill(ix2, row, ox2, row + 1, color);
+                     RUN_B.row(ix2, ox2, row, color);
                   }
                } else {
-                  context.fill(ox1, row, ox2, row + 1, color);
+                  RUN_A.row(ox1, ox2, row, color);
                }
             }
          }
+
+         RUN_A.flush(color);
+         RUN_B.flush(color);
+         batchEnd();
       }
    }
 
    public static void circle(DrawContext context, float centerX, float centerY, float radius, int color) {
-      if (!(radius <= 0.0F)) {
+      if (!(radius <= 0.0F) && (color >>> 24) >= 4) {
          int top = (int)Math.ceil((double)(centerY - radius));
          int bottom = (int)Math.ceil((double)(centerY + radius));
+         batchBegin(context);
 
          for (int row = top; row < bottom; row++) {
             float dy = (float)row + 0.5F - centerY;
@@ -83,10 +170,13 @@ public final class Render2D {
                int x1 = (int)Math.ceil((double)(centerX - half));
                int x2 = (int)Math.floor((double)(centerX + half));
                if (x2 > x1) {
-                  context.fill(x1, row, x2, row + 1, color);
+                  RUN_A.row(x1, x2, row, color);
                }
             }
          }
+
+         RUN_A.flush(color);
+         batchEnd();
       }
    }
 

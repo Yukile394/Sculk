@@ -16,7 +16,27 @@ public final class Fonts {
    public static final Identifier MEDIUM = Identifier.of("sculk", "sf_medium");
    public static final Identifier BOLD = Identifier.of("sculk", "sf_bold");
 
+   // The same few hundred strings are measured and drawn every frame; building a Text and measuring it each time
+   // was a large part of the GUI cost, so both are cached (cleared every 30 s and whenever they grow too large,
+   // which also picks up a font reload).
+   private static final java.util.HashMap<String, Text> STYLED_CACHE = new java.util.HashMap<>();
+   private static final java.util.HashMap<String, Text> STYLED_BOLD_CACHE = new java.util.HashMap<>();
+   private static final java.util.HashMap<String, Integer> WIDTH_CACHE = new java.util.HashMap<>();
+   private static final java.util.HashMap<String, Integer> WIDTH_BOLD_CACHE = new java.util.HashMap<>();
+   private static long lastClear = System.currentTimeMillis();
+
    private Fonts() {
+   }
+
+   private static void housekeeping() {
+      long now = System.currentTimeMillis();
+      if (now - lastClear > 30000L || STYLED_CACHE.size() > 1500 || STYLED_BOLD_CACHE.size() > 1500 || WIDTH_CACHE.size() > 1500 || WIDTH_BOLD_CACHE.size() > 1500) {
+         STYLED_CACHE.clear();
+         STYLED_BOLD_CACHE.clear();
+         WIDTH_CACHE.clear();
+         WIDTH_BOLD_CACHE.clear();
+         lastClear = now;
+      }
    }
 
    private static TextRenderer renderer() {
@@ -24,10 +44,18 @@ public final class Fonts {
    }
 
    public static Text styled(String text, boolean bold) {
-      MutableText out = Text.literal(text);
-      // sf_bold.ttf draws missing-glyph boxes in game, so bold is Medium with the vanilla bold style instead
-      out.setStyle(Style.EMPTY.withFont(MEDIUM).withBold(bold));
-      return out;
+      housekeeping();
+      java.util.HashMap<String, Text> cache = bold ? STYLED_BOLD_CACHE : STYLED_CACHE;
+      Text cached = cache.get(text);
+      if (cached == null) {
+         MutableText out = Text.literal(text);
+         // sf_bold.ttf draws missing-glyph boxes in game, so bold is Medium with the vanilla bold style instead
+         out.setStyle(Style.EMPTY.withFont(MEDIUM).withBold(bold));
+         cache.put(text, out);
+         cached = out;
+      }
+
+      return cached;
    }
 
    public static void draw(DrawContext context, String text, float x, float y, int color, boolean bold, boolean shadow) {
@@ -68,7 +96,14 @@ public final class Fonts {
    }
 
    public static int width(String text, boolean bold) {
-      return renderer().getWidth(styled(text, bold));
+      java.util.HashMap<String, Integer> cache = bold ? WIDTH_BOLD_CACHE : WIDTH_CACHE;
+      Integer cached = cache.get(text);
+      if (cached == null) {
+         cached = renderer().getWidth(styled(text, bold));
+         cache.put(text, cached);
+      }
+
+      return cached;
    }
 
    public static int width(String text) {

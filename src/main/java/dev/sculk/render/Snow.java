@@ -8,6 +8,8 @@ import net.minecraft.client.gui.DrawContext;
 /**
  * Falling snow for the GUI background. Flakes have a depth: far ones are small, dim and slow, near ones are bigger,
  * brighter and faster, and they sway sideways. The mouse position adds a gentle wind.
+ * Every flake goes into one quad batch, so the whole snowfall is a single draw call. Lite mode uses fewer flakes
+ * and no glow.
  */
 public final class Snow {
    private static final Random RNG = new Random();
@@ -15,6 +17,7 @@ public final class Snow {
    private static final int SNOW_COLOR = 0xFFEAF3FF;
    private static int sceneWidth;
    private static int sceneHeight;
+   private static boolean sceneLite;
    private static float time;
 
    private Snow() {
@@ -41,17 +44,20 @@ public final class Snow {
    /**
     * @param dt     seconds since the previous frame
     * @param factor 0..1 overall opacity (used for the fade-in of the GUI)
+    * @param lite   fewer flakes, no glow (FPS Boost)
     */
-   public static void render(DrawContext context, int width, int height, int mouseX, float dt, float factor) {
+   public static void render(DrawContext context, int width, int height, int mouseX, float dt, float factor, boolean lite) {
       if (width <= 0 || height <= 0 || factor <= 0.01F) {
          return;
       }
 
-      if (width != sceneWidth || height != sceneHeight) {
+      if (width != sceneWidth || height != sceneHeight || lite != sceneLite) {
          sceneWidth = width;
          sceneHeight = height;
+         sceneLite = lite;
          FLAKES.clear();
-         int count = Math.max(90, Math.min(280, width * height / 7000));
+         int cap = lite ? 55 : 130;
+         int count = Math.max(40, Math.min(cap, width * height / 9000));
 
          for (int i = 0; i < count; i++) {
             Flake flake = new Flake();
@@ -62,6 +68,7 @@ public final class Snow {
 
       time += dt;
       float wind = ((float)mouseX / (float)width - 0.5F) * 16.0F;
+      Render2D.batchBegin(context);
 
       for (Flake flake : FLAKES) {
          flake.y += (14.0F + 46.0F * flake.depth) * dt;
@@ -81,13 +88,20 @@ public final class Snow {
          float alpha = (0.25F + 0.65F * flake.depth) * factor;
          int color = Theme.scaleAlpha(SNOW_COLOR, alpha);
          if (size >= 2.0F) {
-            Render2D.circle(context, drawX, flake.y, size * 1.7F, Theme.scaleAlpha(SNOW_COLOR, alpha * 0.10F));
-            Render2D.circle(context, drawX, flake.y, size / 2.0F + 0.4F, color);
+            if (!lite) {
+               float glow = size * 1.4F;
+               Render2D.batchRect(drawX - glow, flake.y - glow, drawX + glow, flake.y + glow, Theme.scaleAlpha(SNOW_COLOR, alpha * 0.08F));
+            }
+
+            float core = size / 2.0F + 0.4F;
+            Render2D.batchRect(drawX - core, flake.y - core, drawX + core, flake.y + core, color);
          } else {
-            int px = Math.round(drawX);
-            int py = Math.round(flake.y);
-            context.fill(px, py, px + 1, py + 1, color);
+            float px = (float)Math.round(drawX);
+            float py = (float)Math.round(flake.y);
+            Render2D.batchRect(px, py, px + 1.0F, py + 1.0F, color);
          }
       }
+
+      Render2D.batchEnd();
    }
 }

@@ -113,11 +113,12 @@ public final class ZeltrixGui extends Screen {
       Zx.frame();
       Fps15 module = SculkClient.get(Fps15.class);
       this.fade = Zx.fast(this.fade, 1.0F, 14.0F);
-      if (module != null && module.blur()) {
+      boolean boost = module != null && module.fpsBoost();
+      if (module != null && module.blur() && !boost) {
          this.applyBlur(delta);
       }
 
-      ZxBackdrop.render(context, this.width, this.height, mouseX, this.fade);
+      ZxBackdrop.render(context, this.width, this.height, mouseX, this.fade, module == null || module.snow(), boost);
       Zx.description = "";
       Zx.search = this.searchField.value().toLowerCase();
 
