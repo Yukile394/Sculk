@@ -23,7 +23,8 @@ import net.minecraft.util.math.Vec3d;
  *
  * Silent: while any other hotbar slot is selected, the rocket is used with slot packets only
  * (select rocket slot -> use item -> select the old slot, all inside one tick). The client-side selected
- * slot is restored before the tick ends, so your held item never visibly changes. The offhand is never touched.
+ * slot is restored before the tick ends, so your held item never visibly changes, and no swing is played or sent,
+ * so the held weapon never animates like an attack. The offhand is never touched.
  */
 public final class AutoFirework extends Module {
    private static final long RESTORE_AFTER = 100L;
@@ -177,7 +178,8 @@ public final class AutoFirework extends Module {
       boolean used;
       inventory.selectedSlot = rocket;
       try {
-         used = this.useHand(player, Hand.MAIN_HAND);
+         // no swing: the hand that is visibly held (sword, axe...) must not animate like an attack
+         used = this.useHand(player, Hand.MAIN_HAND, false);
       } finally {
          inventory.selectedSlot = original;
          ((Mixin13) this.mc.interactionManager).sculk$syncSelectedSlot();
@@ -190,10 +192,14 @@ public final class AutoFirework extends Module {
       return used;
    }
 
-   /** Vanilla use: the hand swings after a successful use, which the server-side shoot check expects. */
+   /** Vanilla use: the hand swings after a successful use. */
    private boolean useHand(ClientPlayerEntity player, Hand hand) {
+      return this.useHand(player, hand, true);
+   }
+
+   private boolean useHand(ClientPlayerEntity player, Hand hand, boolean swing) {
       ActionResult result = this.mc.interactionManager.interactItem(player, hand);
-      if (result == ActionResult.SUCCESS) {
+      if (swing && result == ActionResult.SUCCESS) {
          player.swingHand(hand);
       }
 
