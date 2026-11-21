@@ -5,7 +5,7 @@ import dev.sculk.gui.HudEditorScreen;
 import dev.sculk.module.Module;
 import dev.sculk.module.modules.client.Fps15;
 import dev.sculk.module.modules.combat.AimAssistModule;
-import dev.sculk.module.modules.combat.AttackAura;
+import dev.sculk.module.modules.combat.Aura;
 import dev.sculk.render.Animation;
 import dev.sculk.render.Render2D;
 import dev.sculk.render.Theme;
@@ -105,7 +105,7 @@ public final class HudWidgets {
             continue;
          }
 
-         if (module instanceof AttackAura aura && aura.currentTarget() != null) {
+         if (module instanceof Aura aura && aura.currentTarget() != null) {
             return aura.currentTarget();
          }
 
@@ -289,7 +289,7 @@ public final class HudWidgets {
       }
 
       if (rows.isEmpty() && editing()) {
-         rows.add(new Row("AttackAura", "[R]", true));
+         rows.add(new Row("Aura", "[R]", true));
          rows.add(new Row("Aim Assist", "[M]", false));
       }
 

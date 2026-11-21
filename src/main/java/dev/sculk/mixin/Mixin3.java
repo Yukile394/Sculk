@@ -4,6 +4,7 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.gen.Invoker;
 
 @Mixin({MinecraftClient.class})
 public interface Mixin3 {
@@ -15,4 +16,7 @@ public interface Mixin3 {
 
    @Accessor("itemUseCooldown")
    void sculk$setItemUseCooldown(int var1);
+
+   @Invoker("doItemUse")
+   void sculk$doItemUse();
 }

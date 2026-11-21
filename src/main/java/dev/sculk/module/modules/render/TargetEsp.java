@@ -4,7 +4,7 @@ import dev.sculk.module.Category;
 import dev.sculk.module.Module;
 import dev.sculk.module.modules.combat.AimAssistModule;
 import dev.sculk.module.modules.combat.AutoFirework;
-import dev.sculk.module.modules.combat.AttackAura;
+import dev.sculk.module.modules.combat.Aura;
 import dev.sculk.module.setting.BooleanSetting;
 import dev.sculk.module.setting.ModeSetting;
 import dev.sculk.module.setting.NumberSetting;
@@ -46,7 +46,7 @@ public final class TargetEsp extends Module {
 
    private Entity pick() {
       for (Module module : SculkClient.modules()) {
-         if (module instanceof AttackAura aura && module.isEnabled() && aura.currentTarget() != null) {
+         if (module instanceof Aura aura && module.isEnabled() && aura.currentTarget() != null) {
             return aura.currentTarget();
          }
 

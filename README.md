@@ -42,3 +42,4 @@ Bootstrap'i `force` ile tekrar çalıştırmak `src/main/java` içindeki elle d�
 - Auto Firework: slot kilidi, 3.2 blok içinde fişek slotu <-> silah slotu döngüsü, dahili Trigger (EclipseCrit / PhantomCrit), Aim Assist uyumu. Trigger açıkken Trigger Bot kapanır.
 - Criticals modülü (Zeltrix modları), Target ESP (Yukile Helix / Orbit + Halo, Pulse, Cage).
 - GUI fontu: Client > GUI Colors > SF Font.
+- AttackAura kaldırıldı. Yerine Tera Client portu: Aura (HvH / Smooth rotation, GCD quantizer, tremor, rastgele saldırı gecikmesi, Smart/Only crit, sprint drop, shield breaker), AutoTotem (Default / Alternative / Matrix / MatrixPick / NewVersion, Safety ayarları) ve ElytraTarget (tahmin edilen hitbox, SharpRot, Visual). Hepsi Combat kategorisinde.
