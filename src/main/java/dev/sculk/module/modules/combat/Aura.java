@@ -12,9 +12,11 @@ import dev.sculk.util.CombatUtils;
 import dev.sculk.util.Friends;
 import dev.sculk.util.MouseQuantizer;
 import dev.sculk.util.RotationManager;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.block.Blocks;
 import net.minecraft.client.gui.screen.ingame.HandledScreen;
+import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.entity.Entity;
 import net.minecraft.entity.LivingEntity;
 import net.minecraft.entity.decoration.ArmorStandEntity;
@@ -31,6 +33,7 @@ import net.minecraft.network.packet.c2s.play.CloseHandledScreenC2SPacket;
 import net.minecraft.network.packet.c2s.play.PlayerActionC2SPacket;
 import net.minecraft.network.packet.c2s.play.UpdateSelectedSlotC2SPacket;
 import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.text.Text;
 import net.minecraft.util.Hand;
 import net.minecraft.util.UseAction;
 import net.minecraft.util.math.BlockPos;
@@ -68,6 +71,13 @@ public final class Aura extends Module {
    private final BooleanSetting animals = new BooleanSetting("Animals", true);
    private final BooleanSetting monsters = new BooleanSetting("Monsters", true);
    private final BooleanSetting invisibles = new BooleanSetting("Invisibles", true);
+   private final BooleanSetting lagComp = new BooleanSetting("LagComp", true)
+      .describe("Holds a swing while the target would already be out of reach when the server processes it (uses ping and the target's speed)");
+   private final NumberSetting serverReach = new NumberSetting("ServerReach", 3.0, 1.0, 6.0, 0.1)
+      .describe("Largest predicted server-side distance to the hitbox at which a swing is made")
+      .visibleWhen(() -> this.lagComp.get());
+   private final BooleanSetting debug = new BooleanSetting("Debug", false)
+      .describe("Prints HIT or MISS for every swing with distance, predicted distance, ping and target speed");
 
    private Entity target;
    private boolean lookingAtHitbox;
@@ -88,12 +98,19 @@ public final class Aura extends Module {
    private final PitchTremor yawTremor = new PitchTremor();
    private final PitchTremor pitchTremor = new PitchTremor();
    private final long aimNoiseSeed = ThreadLocalRandom.current().nextLong();
+   private Entity trackedEntity;
+   private Vec3d trackedPos = Vec3d.ZERO;
+   private Vec3d targetVelocity = Vec3d.ZERO;
+   private LivingEntity probeTarget;
+   private int probeTicksLeft;
+   private int probeHurtBefore;
+   private String probeInfo = "";
 
    public Aura() {
       super("Aura", "Automatically targets and attacks entities (Tera Client port)", Category.COMBAT);
       this.addSettings(new Setting[]{this.attackRange, this.aimRange, this.elytraAimRange, this.rotationMode, this.crit, this.dropSprint,
          this.shieldBreaker, this.unpressShield, this.pauseWhileEating, this.pauseInInventory, this.deathDisable, this.killDisable,
-         this.players, this.animals, this.monsters, this.invisibles});
+         this.players, this.animals, this.monsters, this.invisibles, this.lagComp, this.serverReach, this.debug});
    }
 
    public Entity currentTarget() {
@@ -124,6 +141,9 @@ public final class Aura extends Module {
          this.pitchAnim.reset(this.mc.player.getPitch());
       }
 
+      this.trackedEntity = null;
+      this.targetVelocity = Vec3d.ZERO;
+      this.probeTarget = null;
       this.lastAttackMs = System.currentTimeMillis() - 2000L;
       this.attackDelayMs = 0L;
       this.cooldownGate = ATTACK_COOLDOWN;
@@ -135,6 +155,8 @@ public final class Aura extends Module {
    @Override
    public void onDisable() {
       this.target = null;
+      this.trackedEntity = null;
+      this.probeTarget = null;
       this.lookingAtHitbox = false;
       RotationManager.release();
    }
@@ -158,6 +180,7 @@ public final class Aura extends Module {
          return;
       }
 
+      this.tickProbe();
       this.tickFallDistance = this.mc.player.fallDistance;
       this.tickOnGround = this.mc.player.isOnGround();
       if (this.mc.currentScreen != null && (this.pauseInInventory.get() || !(this.mc.currentScreen instanceof HandledScreen<?>))) {
@@ -167,6 +190,7 @@ public final class Aura extends Module {
 
       this.handleKill();
       this.updateTarget();
+      this.trackTarget();
       if (this.target == null) {
          this.lookingAtHitbox = false;
          return;
@@ -177,8 +201,11 @@ public final class Aura extends Module {
          return;
       }
 
-      this.commitRotation();
+      // The server only knows the rotation the player entity carried when this tick's movement packet went out, so the
+      // swing is judged against that rotation first. The new aim is committed afterwards and goes out with the next packet.
+      this.lookingAtHitbox = this.isLookingAtHitbox(this.mc.player.getYaw(), this.mc.player.getPitch(), this.target, this.getRange());
       this.tryAttack();
+      this.commitRotation();
    }
 
    private void updateTarget() {
@@ -236,7 +263,8 @@ public final class Aura extends Module {
    }
 
    private Vec3d getAimPoint() {
-      Box box = this.getTargetBox(this.target);
+      // aim where the target will be when the next movement packet is judged
+      Box box = this.getTargetBox(this.target).offset(this.targetVelocity);
       if (this.getEffectiveRotationMode() == Aura.Mode.HvH) {
          return this.closestPointOnBox(this.mc.player.getEyePos(), box);
       }
@@ -295,7 +323,7 @@ public final class Aura extends Module {
 
       // elytra: the target moves too fast for the smoothed aim, snap onto the target's eye position
       if (!this.lookingAtHitbox && this.mc.player.isFallFlying() && this.getEffectiveRotationMode() == Aura.Mode.HvH && this.autoCrit()) {
-         Vec3d aim = new Vec3d(this.target.getX(), this.target.getEyeY(), this.target.getZ());
+         Vec3d aim = new Vec3d(this.target.getX(), this.target.getEyeY(), this.target.getZ()).add(this.targetVelocity);
          float[] snap = this.anglesTo(aim);
          this.applyRotation(
             this.quantizer.yaw(this.mc.player.getYaw(), snap[0]),
@@ -347,7 +375,7 @@ public final class Aura extends Module {
    // ---------------------------------------------------------------- attack
 
    private void tryAttack() {
-      if (this.target == null || !this.autoCrit() || !this.lookingAtHitbox) {
+      if (this.target == null || !this.autoCrit() || !this.lookingAtHitbox || !this.withinServerReach()) {
          return;
       }
 
@@ -355,9 +383,110 @@ public final class Aura extends Module {
          return;
       }
 
+      this.startProbe();
       boolean[] state = this.preAttack();
       this.attack();
       this.postAttack(state[0], state[1]);
+   }
+
+   // ----------------------------------------------------- latency / reach
+
+   /** Per-tick velocity of the target, smoothed; the client moves other entities in small interpolation steps. */
+   private void trackTarget() {
+      if (this.target == null) {
+         this.trackedEntity = null;
+         this.targetVelocity = Vec3d.ZERO;
+         return;
+      }
+
+      Vec3d pos = this.target.getPos();
+      if (this.target != this.trackedEntity) {
+         this.trackedEntity = this.target;
+         this.trackedPos = pos;
+         this.targetVelocity = Vec3d.ZERO;
+         return;
+      }
+
+      Vec3d step = pos.subtract(this.trackedPos);
+      this.trackedPos = pos;
+      if (step.lengthSquared() > 64.0) {
+         this.targetVelocity = Vec3d.ZERO;
+      } else {
+         this.targetVelocity = this.targetVelocity.multiply(0.6).add(step.multiply(0.4));
+      }
+   }
+
+   private int pingMs() {
+      if (this.mc.getNetworkHandler() == null) {
+         return 0;
+      }
+
+      PlayerListEntry entry = this.mc.getNetworkHandler().getPlayerListEntry(this.mc.player.getUuid());
+      return entry == null ? 0 : MathHelper.clamp(entry.getLatency(), 0, 400);
+   }
+
+   /**
+    * How many ticks the target has moved on the server by the time our swing is processed: the position we see is old by
+    * the one-way latency plus the client interpolation (about 1.5 ticks), and the swing needs another one-way trip.
+    */
+   private double lagTicks() {
+      return (double)this.pingMs() / 50.0 + 1.5;
+   }
+
+   private double distanceToBox(Box box) {
+      Vec3d eye = this.mc.player.getEyePos();
+      return this.closestPointOnBox(eye, box).distanceTo(eye);
+   }
+
+   private Box predictedServerBox() {
+      return this.getTargetBox(this.target).offset(this.targetVelocity.multiply(this.lagTicks()));
+   }
+
+   /** False while the target is predicted to be beyond ServerReach when the server handles the swing. */
+   private boolean withinServerReach() {
+      if (!this.lagComp.get()) {
+         return true;
+      }
+
+      return this.distanceToBox(this.predictedServerBox()) <= (double)this.serverReach.getFloat();
+   }
+
+   // ------------------------------------------------------------- debug
+
+   private void startProbe() {
+      if (!this.debug.get() || !(this.target instanceof LivingEntity living)) {
+         this.probeTarget = null;
+         return;
+      }
+
+      this.probeTarget = living;
+      this.probeHurtBefore = living.hurtTime;
+      this.probeTicksLeft = MathHelper.clamp(this.pingMs() / 50 + 4, 4, 8);
+      this.probeInfo = String.format(
+         Locale.ROOT,
+         "dist %.2f pred %.2f ping %d spd %.2f b/t",
+         this.distanceToBox(this.getTargetBox(living)),
+         this.distanceToBox(this.predictedServerBox()),
+         this.pingMs(),
+         this.targetVelocity.length()
+      );
+   }
+
+   private void tickProbe() {
+      if (this.probeTarget == null) {
+         return;
+      }
+
+      if (!this.debug.get()) {
+         this.probeTarget = null;
+         return;
+      }
+
+      boolean hit = this.probeTarget.hurtTime >= 8 && this.probeHurtBefore < 8;
+      if (hit || --this.probeTicksLeft <= 0) {
+         this.mc.player.sendMessage(Text.literal((hit ? "[Aura] HIT  " : "[Aura] MISS ") + this.probeInfo), false);
+         this.probeTarget = null;
+      }
    }
 
    private void attack() {
