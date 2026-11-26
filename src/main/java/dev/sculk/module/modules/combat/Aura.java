@@ -55,7 +55,7 @@ import net.minecraft.util.math.Vec3d;
 public final class Aura extends Module {
    private static final float ATTACK_COOLDOWN = 0.86F;
 
-   private final NumberSetting attackRange = new NumberSetting("Range", 3.1, 1.0, 6.0, 0.1);
+   private final NumberSetting attackRange = new NumberSetting("Range", 2.9, 1.0, 6.0, 0.1);
    private final NumberSetting aimRange = new NumberSetting("AimRange", 3.1, 0.0, 6.0, 0.1);
    private final NumberSetting elytraAimRange = new NumberSetting("ElytraAimRange", 25.0, 10.0, 100.0, 1.0);
    private final ModeSetting<Aura.Mode> rotationMode = new ModeSetting<>("Rotation", Aura.Mode.HvH);
@@ -73,7 +73,7 @@ public final class Aura extends Module {
    private final BooleanSetting invisibles = new BooleanSetting("Invisibles", true);
    private final BooleanSetting lagComp = new BooleanSetting("LagComp", true)
       .describe("Holds a swing while the target would already be out of reach when the server processes it (uses ping and the target's speed)");
-   private final NumberSetting serverReach = new NumberSetting("ServerReach", 3.0, 1.0, 6.0, 0.1)
+   private final NumberSetting serverReach = new NumberSetting("ServerReach", 2.7, 1.0, 6.0, 0.1)
       .describe("Largest predicted server-side distance to the hitbox at which a swing is made")
       .visibleWhen(() -> this.lagComp.get());
    private final BooleanSetting debug = new BooleanSetting("Debug", false)
@@ -495,11 +495,11 @@ public final class Aura extends Module {
       this.rollNextAttack();
    }
 
-   /** Randomized gap between hits (450-550 ms, 7 % chance of an extra 150-400 ms) and a jittered charge gate. */
+   /** Randomized gap between hits (520-620 ms, above the 500 ms damage immunity of the target, 7 % chance of an extra 150-400 ms) and a jittered charge gate. */
    private void rollNextAttack() {
       ThreadLocalRandom rnd = ThreadLocalRandom.current();
       this.lastAttackMs = System.currentTimeMillis();
-      this.attackDelayMs = (long)rnd.nextDouble(450.0, 550.0);
+      this.attackDelayMs = (long)rnd.nextDouble(520.0, 620.0);
       if (rnd.nextFloat() < 0.07F) {
          this.attackDelayMs += (long)rnd.nextDouble(150.0, 400.0);
       }

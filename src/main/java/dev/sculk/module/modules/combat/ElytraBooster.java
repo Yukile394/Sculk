@@ -51,31 +51,31 @@ public final class ElytraBooster extends Module {
    private static final long LEASE_MS = 150L;
    private static final double LEARNED_CAP_FLOOR = 0.8;
 
-   private final ModeSetting<Mode> mode = new ModeSetting<>("Mode", Mode.Physics)
+   private final ModeSetting<Mode> mode = new ModeSetting<>("Mode", Mode.Emulate)
       .describe("Physics = rockets only; Emulate = extra vanilla rocket steps; Raw = flat impulse (most detectable)");
-   private final NumberSetting engageRange = new NumberSetting("Engage Range", 48.0, 10.0, 120.0, 1.0)
+   private final NumberSetting engageRange = new NumberSetting("Engage Range", 45.0, 10.0, 120.0, 1.0)
       .describe("Distance to the Aura target below which the booster takes over rocket firing");
-   private final NumberSetting strikeRange = new NumberSetting("Strike Range", 7.0, 3.0, 20.0, 0.5)
+   private final NumberSetting strikeRange = new NumberSetting("Strike Range", 5.0, 3.0, 20.0, 0.5)
       .describe("Inside this distance the closing speed is controlled instead of maximised");
-   private final NumberSetting leadDistance = new NumberSetting("Lead Distance", 2.5, 0.0, 10.0, 0.5)
+   private final NumberSetting leadDistance = new NumberSetting("Lead Distance", 2.0, 0.0, 10.0, 0.5)
       .describe("How far in front of the target (along its heading) counts as 'passed'");
    private final BooleanSetting overtake = new BooleanSetting("Overtake", true)
       .describe("Inside Strike Range keep a small positive closing speed until you are in front of the target");
-   private final NumberSetting passSpeed = new NumberSetting("Pass Speed", 0.35, 0.05, 1.5, 0.05)
+   private final NumberSetting passSpeed = new NumberSetting("Pass Speed", 0.3, 0.05, 1.5, 0.05)
       .describe("Blocks per tick of closing speed wanted while overtaking inside Strike Range (uncalibrated)")
       .visibleWhen(() -> this.overtake.get());
-   private final NumberSetting stack = new NumberSetting("Rocket Stack", 1.0, 1.0, 3.0, 1.0)
+   private final NumberSetting stack = new NumberSetting("Rocket Stack", 2.0, 1.0, 3.0, 1.0)
       .describe("How many real rockets are kept burning at once while approaching");
-   private final NumberSetting refireAhead = new NumberSetting("Refire Ahead", 3.0, 0.0, 10.0, 1.0)
+   private final NumberSetting refireAhead = new NumberSetting("Refire Ahead", 4.0, 0.0, 10.0, 1.0)
       .describe("Ticks before the estimated end of a rocket at which the next one is fired");
-   private final NumberSetting minGap = new NumberSetting("Min Gap", 4.0, 2.0, 20.0, 1.0)
+   private final NumberSetting minGap = new NumberSetting("Min Gap", 3.0, 2.0, 20.0, 1.0)
       .describe("Smallest number of ticks between two rocket uses (random +-1 tick is added)");
    private final NumberSetting minSpeed = new NumberSetting("Min Speed", 0.7, 0.2, 1.5, 0.05)
       .describe("Below this speed (blocks per tick) a rocket is fired whatever the phase, so you never stall");
-   private final NumberSetting speedCap = new NumberSetting("Speed Cap", 1.75, 1.0, 3.0, 0.05)
+   private final NumberSetting speedCap = new NumberSetting("Speed Cap", 1.9, 1.0, 3.0, 0.05)
       .describe("Emulate / Raw never push beyond this speed (blocks per tick). Uncalibrated; the vanilla rocket limit is about 1.7")
       .visibleWhen(() -> !this.mode.is(Mode.Physics));
-   private final NumberSetting emulateSteps = new NumberSetting("Emulate Steps", 1.0, 1.0, 2.0, 1.0)
+   private final NumberSetting emulateSteps = new NumberSetting("Emulate Steps", 2.0, 1.0, 2.0, 1.0)
       .describe("Extra rocket formula applications per tick while a real rocket is active")
       .visibleWhen(() -> this.mode.is(Mode.Emulate));
    private final NumberSetting rawImpulse = new NumberSetting("Raw Impulse", 0.04, 0.01, 0.3, 0.01)
@@ -84,9 +84,9 @@ public final class ElytraBooster extends Module {
    private final NumberSetting backoff = new NumberSetting("Backoff", 5.0, 1.0, 30.0, 1.0)
       .describe("Seconds Emulate / Raw stay off after the server corrected your position")
       .visibleWhen(() -> !this.mode.is(Mode.Physics));
-   private final BooleanSetting onlyGlidingTarget = new BooleanSetting("Only Gliding Target", false)
+   private final BooleanSetting onlyGlidingTarget = new BooleanSetting("Only Gliding Target", true)
       .describe("Only act while the Aura target is gliding too");
-   private final BooleanSetting debug = new BooleanSetting("Debug", false)
+   private final BooleanSetting debug = new BooleanSetting("Debug", true)
       .describe("Once per second: phase, speeds, distances, active rockets, cap and server corrections");
 
    private static final class Fired {
@@ -250,7 +250,10 @@ public final class ElytraBooster extends Module {
          }
       }
 
-      if (!this.mode.is(Mode.Physics) && this.phase == Phase.Approach && align >= MIN_ALIGN_EXTRA) {
+      // extras also run while overtaking inside Strike Range: at equal rocket-limited speeds rockets alone never open a gap
+      boolean overtaking = this.phase == Phase.Strike && this.overtake.get() && situation.hasHeading()
+         && situation.ahead() < this.leadDistance.getValue() && situation.closing() < this.passSpeed.getValue();
+      if (!this.mode.is(Mode.Physics) && (this.phase == Phase.Approach || overtaking) && align >= MIN_ALIGN_EXTRA) {
          this.applyExtra(player, look);
       }
 
