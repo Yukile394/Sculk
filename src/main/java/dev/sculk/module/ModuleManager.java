@@ -6,6 +6,7 @@ import dev.sculk.module.modules.client.Fps24;
 import dev.sculk.module.modules.client.Fps25;
 import dev.sculk.module.modules.client.SoundsModule;
 import dev.sculk.module.modules.combat.AutoFirework;
+import dev.sculk.module.modules.combat.ElytraBooster;
 import dev.sculk.module.modules.combat.Aura;
 import dev.sculk.module.modules.combat.AutoTotem;
 import dev.sculk.module.modules.misc.Nuker;
@@ -192,6 +193,7 @@ public final class ModuleManager {
       MODULAR.add(new Fps13());
       MODULAR.add(new Fps14());
       MODULAR.add(new AutoFirework());
+      MODULAR.add(new ElytraBooster());
       MODULAR.add(new Fps31());
       MODULAR.add(new Fps32());
       MODULAR.add(new Criticals());

@@ -9,7 +9,10 @@ import dev.sculk.module.setting.NumberSetting;
 import dev.sculk.module.setting.Setting;
 import dev.sculk.util.Timer;
 import net.minecraft.client.network.ClientPlayerEntity;
+import net.minecraft.component.DataComponentTypes;
+import net.minecraft.component.type.FireworksComponent;
 import net.minecraft.entity.player.PlayerInventory;
+import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.util.ActionResult;
 import net.minecraft.util.Hand;
@@ -51,6 +54,8 @@ public final class AutoFirework extends Module {
    private long tempAt;
    private long failedAt;
    private boolean wasGliding = false;
+   /** While now < this, another module (ElytraBooster) decides when rockets are fired and the own timer stays quiet. */
+   private volatile long externalUntilMs;
 
    public AutoFirework() {
       super("Auto Firework", "Fires elytra rockets automatically; Silent fires them from any slot without switching", Category.COMBAT);
@@ -101,9 +106,70 @@ public final class AutoFirework extends Module {
       this.rocketTick(gliding);
    }
 
+   // ───────────────────────────── external control (ElytraBooster) ─────────────────────────────
+
+   /** Hands rocket timing to another module for {@code millis}; call again every tick to keep it, 0 releases it at once. */
+   public void leaseControl(long millis) {
+      this.externalUntilMs = millis <= 0L ? 0L : System.currentTimeMillis() + millis;
+   }
+
+   private boolean externallyControlled() {
+      return System.currentTimeMillis() < this.externalUntilMs;
+   }
+
+   /** Uses one rocket now through the normal path (offhand, main hand, Silent swap or hotbar). Needs the module to be enabled. */
+   public boolean fireNow() {
+      ClientPlayerEntity player = this.mc.player;
+      if (!this.isEnabled() || player == null || this.mc.world == null || this.mc.interactionManager == null) {
+         return false;
+      }
+
+      if (this.mc.currentScreen != null || player.isDead() || player.isUsingItem()) {
+         return false;
+      }
+
+      if (this.onlyGliding.get() && !player.isFallFlying()) {
+         return false;
+      }
+
+      boolean used = this.useRocket();
+      if (used) {
+         this.timer.reset();
+      }
+
+      return used;
+   }
+
+   /** Flight duration of the rocket stack useRocket() would take next (same order: offhand, main hand, hotbar); 1 when unknown. */
+   public int peekRocketFlight() {
+      ClientPlayerEntity player = this.getMC().player;
+      if (player == null) {
+         return 1;
+      }
+
+      ItemStack stack = ItemStack.EMPTY;
+      if (player.getOffHandStack().isOf(Items.FIREWORK_ROCKET)) {
+         stack = player.getOffHandStack();
+      } else if (player.getMainHandStack().isOf(Items.FIREWORK_ROCKET)) {
+         stack = player.getMainHandStack();
+      } else {
+         int slot = this.findRocketSlot();
+         if (slot >= 0) {
+            stack = player.getInventory().getStack(slot);
+         }
+      }
+
+      FireworksComponent component = stack.isEmpty() ? null : stack.get(DataComponentTypes.FIREWORKS);
+      return component == null ? 1 : component.flightDuration();
+   }
+
    // ───────────────────────────── rockets ─────────────────────────────
 
    private void rocketTick(boolean gliding) {
+      if (this.externallyControlled()) {
+         return;
+      }
+
       ClientPlayerEntity player = this.mc.player;
       if (!player.isUsingItem()) {
          boolean allowed = gliding || !this.onlyGliding.get();
